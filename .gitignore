@@ -1,0 +1,57 @@
+# --- Secrets / credentials (NEVER commit) ---
+config/api_keys.json
+config/*.key
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+email_credentials.json
+.email_key
+ig_session.json
+discord_bot.json
+lisa_connect.json
+
+# --- Virtual env / caches ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Build / packaging artifacts ---
+build/
+dist/
+*.egg-info/
+*.spec.bak
+installer/*.spec.bak
+
+# --- Logs / temp ---
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+Thumbs.db
+desktop.ini
+
+# --- Personal runtime data (local only) ---
+memory/user_data/
+deliverables/
+config/app_settings.json
+config/identity.json
+config/.desktop_shortcut_created
+ig_debug.log
+
+# --- Android project (excluded from GitHub) ---
+brahma-connect-android/
+
+# --- Scratch / helper scripts ---
+_sweep_text.py
+_scan_*.py
+_fix_*.py
+_ascii_fix.py
+_restore_icons.py
