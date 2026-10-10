@@ -116,7 +116,7 @@ To disable the HUD integration, set `LISA_HUD_ORB=0`. To disable both orbs, set 
 ## Building the Offline Installer (EXE)
 
 The distributable `LisaAI_Setup.exe` is a single self-contained file that
-installs Lisa AI on any Windows 10/11 PC with **all dependencies bundled** —
+installs Lisa AI on any Windows 10/11 PC with **all dependencies bundled** -
 the target machine needs no Python, no pip, no setup. Installation works
 fully offline.
 
@@ -131,13 +131,13 @@ commands** (run inside the project folder):
 .venv\Scripts\pyinstaller.exe --noconfirm installer\LisaAI_Setup.spec
 ```
 
-The installer then appears at **`dist\LisaAI_Setup.exe`** — copy that one
+The installer then appears at **`dist\LisaAI_Setup.exe`** - copy that one
 file to any PC and run it. The wizard unpacks everything and creates Desktop
 and Start-menu "Lisa AI" shortcuts.
 
 Notes:
 - One-time build setup: `.venv\Scripts\python.exe -m pip install -r requirements.txt pyinstaller pywin32`
-- **Order matters** — Step 2 packs whatever Step 1 produced, so always run both.
+- **Order matters** - Step 2 packs whatever Step 1 produced, so always run both.
 - Personal data (API keys, identity, memory, settings) is automatically
   excluded from the installer.
 - Full packaging details: `installer/README.md`.
