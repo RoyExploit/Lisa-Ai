@@ -40,3 +40,7 @@ SpeechRecognition
 matplotlib
 speedtest-cli
 pygame-ce>=2.5
+
+# --- Build / packaging (only needed to rebuild the offline installer) ---
+pyinstaller>=6.0
+pywin32

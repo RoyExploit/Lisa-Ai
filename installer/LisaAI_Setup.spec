@@ -6,14 +6,14 @@ cwd = os.path.abspath(os.path.join(os.getcwd(), '..'))
 if not os.path.exists(os.path.join(cwd, 'installer')):
     cwd = os.path.abspath(os.getcwd()) # fallback
 
-source_dir = os.path.join(cwd, 'dist', 'LisaEvo')
+source_dir = os.path.join(cwd, 'dist', 'LisaAI')
 
 a = Analysis(
     [os.path.join(cwd, 'installer', 'install_wizard.py')],
     pathex=[],
     binaries=[],
     datas=[
-        (source_dir, 'LisaEvo'),
+        (source_dir, 'LisaAI'),
         (os.path.join(cwd, 'assets'), 'assets')
     ],
     hiddenimports=['PyQt6', 'shutil', 'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebEngineCore'],
@@ -32,7 +32,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='LisaEvo_Setup',
+    name='LisaAI_Setup',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

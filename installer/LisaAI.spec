@@ -55,7 +55,9 @@ excluded_files = [
     'long_term.json',
     'nutrition_log.json',
     'lisa_connect.json',
-    'devices.json'
+    'devices.json',
+    'user_data',
+    'app_settings.json'
 ]
 
 a.datas = [x for x in a.datas if not any(excl in x[0].replace('\\', '/') for excl in excluded_files)]
@@ -67,7 +69,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='LisaEvo',
+    name='LisaAI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -89,5 +91,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='LisaEvo'
+    name='LisaAI'
 )
