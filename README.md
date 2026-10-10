@@ -107,10 +107,40 @@ screen even when the main window is minimized, so you can talk to Lisa while
 working in other apps.
 
 No NPM, no Electron, no localhost server, and no second process are involved,
-so it bundles into the single release EXE and works fully offline. The
-original Electron sources are kept untouched in `hud_orb/` for reference.
+so it bundles into the single release EXE and works fully offline.
 
 To disable the HUD integration, set `LISA_HUD_ORB=0`. To disable both orbs, set `LISA_ORBS=0`.
+
+---
+
+## Building the Offline Installer (EXE)
+
+The distributable `LisaAI_Setup.exe` is a single self-contained file that
+installs Lisa AI on any Windows 10/11 PC with **all dependencies bundled** —
+the target machine needs no Python, no pip, no setup. Installation works
+fully offline.
+
+**If the EXE is ever lost, always recreate it from the source code with two
+commands** (run inside the project folder):
+
+```powershell
+# Step 1 - build the app folder (creates dist\LisaAI\ with LisaAI.exe)
+.venv\Scripts\pyinstaller.exe --noconfirm installer\LisaAI.spec
+
+# Step 2 - pack that folder into the single-file installer
+.venv\Scripts\pyinstaller.exe --noconfirm installer\LisaAI_Setup.spec
+```
+
+The installer then appears at **`dist\LisaAI_Setup.exe`** — copy that one
+file to any PC and run it. The wizard unpacks everything and creates Desktop
+and Start-menu "Lisa AI" shortcuts.
+
+Notes:
+- One-time build setup: `.venv\Scripts\python.exe -m pip install -r requirements.txt pyinstaller pywin32`
+- **Order matters** — Step 2 packs whatever Step 1 produced, so always run both.
+- Personal data (API keys, identity, memory, settings) is automatically
+  excluded from the installer.
+- Full packaging details: `installer/README.md`.
 
 ---
 
@@ -137,9 +167,8 @@ Lisa AI/
 |-- main.py                  # Main entry point and live event loop
 |-- ui.py                    # PyQt6 GUI: Command Bar, FFT waveform, HUD wings, chat
 |-- orb_bridge.py            # Drives the particle orb + external HUD orb from app state
-|-- ui_particle/             # Main particle-sphere orb UI (Pygame)
+|-- orb_stage.py             # Embedded particle-orb UI (native, in-app)
 |-- hud_overlay.py           # Native HUD orb: transparent, always-on-top overlay (PyQt6)
-|-- hud_orb/                 # Original Electron HUD sources (kept for reference)
 |-- llm_client.py            # LLM provider client (Gemini, etc.)
 |-- or_client.py             # OpenRouter client
 |-- discord_bot.py           # Discord integration
