@@ -3936,14 +3936,14 @@ class LisaLive:
             return
 
         if self.session and self._loop:
-            # Route text through Gemini Live API for the unified native Charon voice
+            # Route text through Gemini Live API for the unified native (Aoede) voice
             import asyncio
             async def _send():
                 try:
                     prompt = f"System Alert / Context: {text}\n\nPlease relay this information to me naturally now."
                     await self.session.send(input=prompt, end_of_turn=True)
                 except Exception as e:
-                    print(f"[Lisa AI] Unified Speak (Charon) err: {e}")
+                    print(f"[Lisa AI] Unified Speak (Aoede) err: {e}")
                     def _fallback():
                         try:
                             self.set_speaking(True)
@@ -4102,7 +4102,7 @@ class LisaLive:
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Charon"
+                        voice_name="Aoede"
                     )
                 )
             ),
@@ -4886,6 +4886,28 @@ class LisaLive:
         speech_buffer = bytearray()
         silence_chunks = 0
 
+        # Adaptive capture tuning -------------------------------------------------
+        # Reading app_settings.json inside the real-time audio callback caused
+        # disk I/O ~15x/second, which dropped chunks and made transcription
+        # inaccurate. Cache it and refresh at most every 2 seconds.
+        _cfg_cache = {"data": None, "at": 0.0}
+        _stt_logged_at = {"t": 0.0}
+
+        def _get_app_cfg():
+            now = time.monotonic()
+            if _cfg_cache["data"] is None or (now - _cfg_cache["at"]) > 2.0:
+                try:
+                    _cfg_cache["data"] = config_manager.load_settings() or {}
+                except Exception:
+                    _cfg_cache["data"] = {}
+                _cfg_cache["at"] = now
+            return _cfg_cache["data"]
+
+        # ~64ms per 1024-sample chunk at 16 kHz: 12 chunks ~= 0.77s trailing silence.
+        _LOCAL_END_SILENCE_CHUNKS = 12
+        # Keep at most ~10s of audio for one local utterance (16 kHz s16le mono).
+        _LOCAL_MAX_BYTES = SEND_SAMPLE_RATE * 2 * 10
+
         def callback(indata, frames, time_info, status):
             nonlocal silence_chunks
             with self._speaking_lock:
@@ -4903,18 +4925,22 @@ class LisaLive:
             
             if not self.ui.muted or getattr(self.ui, "_wakeword_listening", False):
                 lvl = float(np.sqrt(np.mean(np.square(indata, dtype=np.float32))))
-                
+                # Speech gate: keep it just above the noise floor so quiet
+                # speech onset is streamed instead of being zeroed out.
+                _gate = 8.0
+
                 # Handle Local AI voice input when in Local or Offline mode
-                app_cfg = config_manager.load_settings()
+                app_cfg = _get_app_cfg()
                 if app_cfg.get("default_ai_provider") == "Local" or app_cfg.get("offline_mode_enabled", False):
                     if not Lisa_speaking and not self.ui.muted:
-                        if lvl > 22.0:
+                        if lvl > 18.0:
                             speech_buffer.extend(indata.tobytes())
+                            if len(speech_buffer) > _LOCAL_MAX_BYTES:
+                                del speech_buffer[: len(speech_buffer) - _LOCAL_MAX_BYTES]
                             silence_chunks = 0
                         elif len(speech_buffer) > 0:
                             silence_chunks += 1
-                            # ~0.7s of silence (each chunk is ~30ms -> 20 chunks)
-                            if silence_chunks > 18:
+                            if silence_chunks > _LOCAL_END_SILENCE_CHUNKS:
                                 captured = bytes(speech_buffer)
                                 speech_buffer.clear()
                                 silence_chunks = 0
@@ -4923,17 +4949,21 @@ class LisaLive:
                                         try:
                                             import speech_recognition as sr
                                             r = sr.Recognizer()
+                                            r.dynamic_energy_threshold = True
                                             audio_data = sr.AudioData(pcm_bytes, SEND_SAMPLE_RATE, 2)
-                                            text_cmd = r.recognize_google(audio_data)
+                                            text_cmd = r.recognize_google(audio_data, language="en-US")
                                             if text_cmd and len(text_cmd.strip()) > 1:
                                                 print(f"[Local AI Voice] ● Heard: {text_cmd}")
                                                 self._on_text_command(text_cmd, source="mic")
-                                        except Exception:
-                                            pass
+                                        except Exception as exc:
+                                            now = time.monotonic()
+                                            if now - _stt_logged_at["t"] > 5.0:
+                                                _stt_logged_at["t"] = now
+                                                print(f"[Local AI Voice] STT error: {exc}")
                                     threading.Thread(target=_process_local_speech, args=(captured,), daemon=True).start()
 
                 if Lisa_speaking:
-                    if self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl) and lvl > 28.0:
+                    if self._echo.is_user_speech(indata, SEND_SAMPLE_RATE, lvl) and lvl > max(15.0, _gate):
                         loop.call_soon_threadsafe(self.trigger_barge_in)
                         data = indata.tobytes()
                     else:
@@ -4946,7 +4976,7 @@ class LisaLive:
                             pass
                     if self._echo._hist:
                         self._echo.reset()
-                    if lvl > 10.0:
+                    if lvl > _gate:
                         data = indata.tobytes()
                     else:
                         data = np.zeros_like(indata).tobytes()

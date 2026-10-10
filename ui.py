@@ -223,6 +223,7 @@ class BackgroundWidget(QWidget):
         # Native particle-orb stage embedded in place of the old
         # WebEngine/Three.js golden-orb background.
         self._orb_stage = None
+        self._last_state = "IDLE"
         self._init_orb_stage()
 
     def _init_orb_stage(self):
@@ -290,12 +291,20 @@ class BackgroundWidget(QWidget):
             pass
 
     def _do_set_ai_state(self, state: str) -> None:
+        st = (state or "IDLE").strip()
+        self._last_state = st
+        # Feed the native embedded orb stage (the in-app orb surface).
+        if self._orb_stage is not None:
+            try:
+                self._orb_stage.set_ai_state(st)
+            except Exception:
+                pass
         if self._web_view:
             try:
-                st = (state or "IDLE").strip().replace("'", "\\'")
+                st_js = st.replace("'", "\\'")
                 page = self._web_view.page()
                 if page:
-                    page.runJavaScript(f"if(window.setLisaState) window.setLisaState('{st}');")
+                    page.runJavaScript(f"if(window.setLisaState) window.setLisaState('{st_js}');")
             except Exception:
                 pass
 
@@ -306,13 +315,19 @@ class BackgroundWidget(QWidget):
             pass
 
     def _do_set_audio_level(self, level: float) -> None:
+        lv = max(0.0, min(1.0, float(level)))
+        # Feed the native embedded orb stage every update (its own timer smooths it).
+        if self._orb_stage is not None:
+            try:
+                self._orb_stage.set_audio_level(lv)
+            except Exception:
+                pass
         now = time.monotonic()
         if (now - self._last_audio_js_time) < 0.016:  # Ultra-smooth 60 FPS WebEngine bridge
             return
         self._last_audio_js_time = now
         if self._web_view:
             try:
-                lv = max(0.0, min(1.0, float(level)))
                 page = self._web_view.page()
                 if page:
                     page.runJavaScript(f"if(window.setAudioLevel) window.setAudioLevel({lv:.3f});")
@@ -338,6 +353,12 @@ class BackgroundWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        if self._orb_stage is not None and self.width() > 0 and self.height() > 0:
+            try:
+                self._orb_stage.setGeometry(self.rect())
+                self._orb_stage.lower()
+            except Exception:
+                pass
         if self._web_view is None and WEB_ENGINE_AVAILABLE:
             self._init_web_engine()
         elif self._web_view and self.width() > 0 and self.height() > 0:
@@ -1869,15 +1890,9 @@ class GestureCameraPreview(QFrame):
         self._stop_camera()
         super().closeEvent(event)
 
-    def mousePressEvent(self, event):
-        try:
-            if event.button() == Qt.MouseButton.LeftButton:
-                self._toggle_camera()
-                event.accept()
-                return
-        except Exception:
-            pass
-        return super().mousePressEvent(event)
+    # NOTE: Clicking inside the preview no longer toggles the camera off.
+    # Accidental clicks were stopping tracking mid-gesture (gestures appeared
+    # "broken"). The Gestures button is the single on/off control.
 
     def _set_status(self, text: str, level: str = "searching"):
         self._status_hint_label.setText(text)
@@ -3492,12 +3507,14 @@ class WorkspaceSidebar(QWidget):
         input_row.setContentsMargins(10, 6, 10, 6)
         input_row.setSpacing(8)
 
-        self._attach_btn = QPushButton("📎 Attach")
+        self._attach_btn = QPushButton()
         self._attach_btn.setFixedSize(30, 30)
         self._attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._attach_btn.setToolTip("Attach file")
+        self._attach_btn.setIcon(QIcon(_icon_pixmap("attach", 15)))
+        self._attach_btn.setIconSize(QSize(15, 15))
         self._attach_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; font-size: 14px; }}"
+            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
         self._attach_btn.clicked.connect(self.attach_requested.emit)
@@ -3512,12 +3529,14 @@ class WorkspaceSidebar(QWidget):
         self._input.returnPressed.connect(self._send)
         input_row.addWidget(self._input, 1)
 
-        self._mic_btn = QPushButton("🎤 Mic")
+        self._mic_btn = QPushButton()
         self._mic_btn.setFixedSize(30, 30)
         self._mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mic_btn.setToolTip("Toggle Voice")
+        self._mic_btn.setIcon(QIcon(_icon_pixmap("mic", 15)))
+        self._mic_btn.setIconSize(QSize(15, 15))
         self._mic_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; font-size: 14px; }}"
+            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
         self._mic_btn.clicked.connect(self.mic_requested.emit)
@@ -4078,12 +4097,14 @@ class InlineChatWorkspace(QFrame):
         input_row.setContentsMargins(8, 6, 8, 6)
         input_row.setSpacing(6)
 
-        self._attach_btn = QPushButton("📎 Attach")
+        self._attach_btn = QPushButton()
         self._attach_btn.setFixedSize(28, 28)
         self._attach_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._attach_btn.setToolTip("Attach file")
+        self._attach_btn.setIcon(QIcon(_icon_pixmap("attach", 14)))
+        self._attach_btn.setIconSize(QSize(14, 14))
         self._attach_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; font-size: 13px; }}"
+            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
         self._attach_btn.clicked.connect(self.attach_requested.emit)
@@ -4098,12 +4119,14 @@ class InlineChatWorkspace(QFrame):
         self._input.returnPressed.connect(self._send)
         input_row.addWidget(self._input, 1)
 
-        self._mic_btn = QPushButton("🎤 Mic")
+        self._mic_btn = QPushButton()
         self._mic_btn.setFixedSize(28, 28)
         self._mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mic_btn.setToolTip("Toggle Voice")
+        self._mic_btn.setIcon(QIcon(_icon_pixmap("mic", 14)))
+        self._mic_btn.setIconSize(QSize(14, 14))
         self._mic_btn.setStyleSheet(
-            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; font-size: 13px; }}"
+            f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
         self._mic_btn.clicked.connect(self.mic_requested.emit)
@@ -8478,6 +8501,9 @@ class FloatingGestureCard(QWidget):
                 "QPushButton { background: rgba(0, 229, 255, 0.15); color: #00e5ff; border: 1px solid #00e5ff; border-radius: 8px; font-weight: bold; }"
                 "QPushButton:hover { background: rgba(0, 229, 255, 0.25); }"
             )
+            # Panels created after this card stack above it - lift it back on top
+            # so the preview and controls stay visible and clickable.
+            self.raise_()
         self.adjustSize()
         if self.window() and hasattr(self.window(), 'resizeEvent'):
             self.window().resizeEvent(None)
@@ -8597,6 +8623,9 @@ class MainWindow(QMainWindow):
         self._right_collapsed = False
         self._right_panel = self._build_right_panel_modern()
         body.addWidget(self._right_panel, stretch=0)
+        # The gesture card was created before these panels, so it would be
+        # stacked underneath them. Lift it above them so Gestures is clickable.
+        self._floating_gesture_card.raise_()
 
         self._btn_dashboard.clicked.connect(self._on_nav_dashboard)
         self._btn_chat.clicked.connect(self._toggle_right_sidebar)
@@ -9066,6 +9095,7 @@ class MainWindow(QMainWindow):
             cw = self.centralWidget()
             rw = self._right_panel.width() if hasattr(self, '_right_panel') and self._right_panel.isVisible() and not getattr(self, '_right_collapsed', False) else 0
             self._floating_gesture_card.move(cw.width() - rw - self._floating_gesture_card.width() - 20, 20)
+            self._floating_gesture_card.raise_()
         if getattr(self, '_briefing_overlay', None) and self._briefing_overlay.isVisible():
             self._position_briefing_overlay()
         if getattr(self, '_remote_overlay', None) and self._remote_overlay.isVisible():

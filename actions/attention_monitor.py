@@ -352,7 +352,11 @@ def _cleanup_current_audio() -> None:
 
 
 def _speak_sapi_male(text: str) -> None:
-    """Speaks using an offline native Windows male voice (Microsoft George / David)."""
+    """Speaks using an offline native Windows voice.
+
+    Prefers female voices (Lisa's persona: Zira, Hazel, Aria, Jenny) and
+    falls back to any available Windows voice when none are found.
+    """
     try:
         import win32com.client
         import pythoncom
@@ -360,18 +364,23 @@ def _speak_sapi_male(text: str) -> None:
         v = win32com.client.Dispatch("SAPI.SpVoice")
         v.Volume = 100
 
-        # Prioritize Windows Speech OneCore male voices (e.g. George, David, Mark)
+        # Prefer Windows Speech OneCore female voices (Aria, Jenny, Zira, Hazel)
         selected = False
+        _FEMALE_HINTS = ("zira", "hazel", "aria", "jenny", "female", "susan", "heami")
+        _MALE_HINTS = ("george", "david", "mark", "male", "guy")
         try:
             category = win32com.client.Dispatch("SAPI.SpObjectTokenCategory")
             category.SetId(r"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech_OneCore\Voices")
             tokens = category.EnumerateTokens()
-            for i in range(tokens.Count):
-                token = tokens.Item(i)
-                desc = token.GetDescription().lower()
-                if any(m in desc for m in ("george", "david", "mark", "male", "guy")):
-                    v.Voice = token
-                    selected = True
+            for hints in (_FEMALE_HINTS, _MALE_HINTS):
+                for i in range(tokens.Count):
+                    token = tokens.Item(i)
+                    desc = token.GetDescription().lower()
+                    if any(m in desc for m in hints):
+                        v.Voice = token
+                        selected = True
+                        break
+                if selected:
                     break
         except Exception:
             pass
@@ -379,17 +388,20 @@ def _speak_sapi_male(text: str) -> None:
         # Fallback to standard SAPI voices if OneCore not available
         if not selected:
             voices = v.GetVoices()
-            for i in range(voices.Count):
-                token = voices.Item(i)
-                desc = token.GetDescription().lower()
-                if any(m in desc for m in ("david", "george", "mark", "male")):
-                    v.Voice = token
-                    selected = True
+            for hints in (_FEMALE_HINTS, _MALE_HINTS):
+                for i in range(voices.Count):
+                    token = voices.Item(i)
+                    desc = token.GetDescription().lower()
+                    if any(m in desc for m in hints):
+                        v.Voice = token
+                        selected = True
+                        break
+                if selected:
                     break
 
         v.Speak(text)
     except Exception as exc:
-        print(f"[AttentionMonitor] Offline male speech failed: {exc}")
+        print(f"[AttentionMonitor] Offline speech failed: {exc}")
 
 
 _speak_lock = threading.Lock()
@@ -427,7 +439,7 @@ def _speak_edge_native(text: str, force_edge: bool = False) -> None:
 
         audio_path = os.path.join(tempfile.gettempdir(), f"Lisa_edge_tts_{uuid.uuid4().hex}.mp3")
         try:
-            communicator = edge_tts.Communicate(text, voice="en-US-GuyNeural")
+            communicator = edge_tts.Communicate(text, voice="en-US-AvaMultilingualNeural")
             communicator.save_sync(audio_path)
         except Exception as exc:
             print(f"[AttentionMonitor] Edge TTS generation failed: {exc}. Falling back to offline male voice.")

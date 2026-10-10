@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from PyQt6.QtCore import QEasingCurve, QDateTime, QPropertyAnimation, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap, QColor
+from PyQt6.QtCore import QEasingCurve, QDateTime, QPropertyAnimation, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QPixmap, QColor, QIcon
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,6 +27,25 @@ from PyQt6.QtWidgets import (
 )
 
 from smart_home import SmartHomeService
+
+
+def _mic_icon_pixmap(size: int = 18) -> QPixmap:
+    """Draw a simple microphone glyph (avoids emoji/English text on the button)."""
+    px = QPixmap(size, size)
+    px.fill(Qt.GlobalColor.transparent)
+    from PyQt6.QtGui import QPainter, QPen
+    p = QPainter(px)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor(TEXT), max(2.0, size * 0.13), Qt.PenStyle.SolidLine,
+                  Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRect( int(size*0.34), int(size*0.12), int(size*0.32), int(size*0.46) ),
+                      int(size*0.16), int(size*0.16))
+    p.drawLine(int(size*0.50), int(size*0.58), int(size*0.50), int(size*0.80))
+    p.drawLine(int(size*0.36), int(size*0.80), int(size*0.64), int(size*0.80))
+    p.drawLine(int(size*0.42), int(size*0.68), int(size*0.58), int(size*0.68))
+    p.end()
+    return px
 
 
 BG = "#020305"
@@ -968,9 +987,12 @@ class LisaHomePage(QWidget):
         lay.addLayout(left, 1)
         
         # Micro wave button on right
-        mic_btn = QPushButton("🎤 Mic")
+        mic_btn = QPushButton()
         mic_btn.setFixedSize(38, 38)
         mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        mic_btn.setIcon(QIcon(_mic_icon_pixmap(18)))
+        mic_btn.setIconSize(QSize(18, 18))
+        mic_btn.setToolTip("Voice input")
         mic_btn.setStyleSheet(f"""
             QPushButton {{
                 background: rgba(0, 229, 255,0.08);

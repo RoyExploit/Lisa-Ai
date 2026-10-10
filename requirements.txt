@@ -36,6 +36,7 @@ python-multipart
 PyQt6
 PyQt6-WebEngine
 edge-tts
+SpeechRecognition
 matplotlib
 speedtest-cli
 pygame-ce>=2.5
