@@ -731,7 +731,7 @@
     }
 
     // Bridge hooks for Python QtWebEngine & Android WebView
-    window.setBrahmaState = function(state) {
+    window.setLisaState = function(state) {
       if (!state) return;
       currentState = String(state).toUpperCase();
       console.log("Lisa AI Assistant State:", currentState);
@@ -852,49 +852,49 @@
           targetScale = 1.0;
           targetCameraZ = 46.0;
           targetPositionX = 0.0;
-          window.setBrahmaState("ONLINE");
+          window.setLisaState("ONLINE");
           break;
         case 1: // Features / About
           targetScale = 1.12;
           targetCameraZ = 39.0;
           targetPositionX = 3.5;
-          window.setBrahmaState("SCANNING");
+          window.setLisaState("SCANNING");
           break;
         case 2: // Sign In
           targetScale = 1.05;
           targetCameraZ = 41.0;
           targetPositionX = -3.2;
-          window.setBrahmaState("THINKING");
+          window.setLisaState("THINKING");
           break;
         case 3: // Download
           targetScale = 1.2;
           targetCameraZ = 36.0;
           targetPositionX = 4.0;
-          window.setBrahmaState("EXECUTING");
+          window.setLisaState("EXECUTING");
           break;
         case 4: // Mobile App
           targetScale = 1.08;
           targetCameraZ = 39.0;
           targetPositionX = -3.8;
-          window.setBrahmaState("LISTENING");
+          window.setLisaState("LISTENING");
           break;
         case 5: // Setup Wizard
           targetScale = 1.04;
           targetCameraZ = 42.0;
           targetPositionX = 3.0;
-          window.setBrahmaState("WORKING");
+          window.setLisaState("WORKING");
           break;
         case 6: // Thanks
           targetScale = 1.0;
           targetCameraZ = 47.0;
           targetPositionX = 0.0;
-          window.setBrahmaState("ONLINE");
+          window.setLisaState("ONLINE");
           break;
         case 7: // Feedback
           targetScale = 0.95;
           targetCameraZ = 50.0;
           targetPositionX = 0.0;
-          window.setBrahmaState("IDLE");
+          window.setLisaState("IDLE");
           break;
       }
     };

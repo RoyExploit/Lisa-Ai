@@ -135,7 +135,7 @@
 </head>
 <body>
   <div class="card" id="card">
-    <div class="logo"><em>Lisa AI ASSISTANT</em> AI</div>
+    <div class="logo"><em>Lisa AI Assistant</em></div>
     <div class="sub">Remote Access</div>
     <p id="reconnecting">Reconnecting…</p>
     <p class="hint">Press <strong style="color:var(--text)">Mobile Connect</strong> in the Lisa AI Assistant desktop app to get a QR code or session key.</p>
@@ -156,7 +156,7 @@
   <script>
     // Try auto-reconnect with stored device token (set on first QR login)
     (async function() {
-      const devTok = localStorage.getItem('brahma_device_token');
+      const devTok = localStorage.getItem('lisa_device_token');
       if (!devTok) return;
       document.getElementById('reconnecting').style.display = 'block';
       try {
@@ -167,14 +167,14 @@
         });
         const d = await r.json();
         if (d.ok && d.token) {
-          sessionStorage.setItem('brahma_key', d.key);
-          sessionStorage.setItem('brahma_token', d.token);
+          sessionStorage.setItem('lisa_key', d.key);
+          sessionStorage.setItem('lisa_token', d.token);
           location.replace('/');
           return;
         }
       } catch (_) {}
       // Device token rejected (server restarted) — clear it and show normal form
-      localStorage.removeItem('brahma_device_token');
+      localStorage.removeItem('lisa_device_token');
       document.getElementById('reconnecting').style.display = 'none';
     })();
 
@@ -203,8 +203,8 @@
         shake(); return;
       }
       if (data.ok && data.token) {
-        sessionStorage.setItem('brahma_key', key);
-        sessionStorage.setItem('brahma_token', data.token);
+        sessionStorage.setItem('lisa_key', key);
+        sessionStorage.setItem('lisa_token', data.token);
         location.href = '/';
       } else {
         inp.value = '';

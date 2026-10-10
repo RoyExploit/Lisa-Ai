@@ -1,7 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
-import sys
-
 cwd = os.path.abspath(os.getcwd())
 
 a = Analysis(
@@ -12,24 +10,30 @@ a = Analysis(
         (os.path.join(cwd, 'assets'), 'assets'),
         (os.path.join(cwd, 'config'), 'config'),
         (os.path.join(cwd, 'core'), 'core'),
-        (os.path.join(cwd, 'brahma_connect'), 'brahma_connect'),
+        (os.path.join(cwd, 'lisa_connect'), 'lisa_connect'),
         (os.path.join(cwd, 'actions'), 'actions'),
         (os.path.join(cwd, 'dashboard/static'), 'dashboard/static'),
         (os.path.join(cwd, 'smart_home'), 'smart_home'),
-        (os.path.join(cwd, 'memory'), 'memory'),
-        (os.path.join(cwd, 'plugins'), 'plugins'),
-        (os.path.join(cwd, 'features'), 'features'),
         (os.path.join(cwd, 'workspace_store.py'), '.'),
         (os.path.join(cwd, 'README.md'), '.'),
         (os.path.join(cwd, 'requirements.txt'), '.'),
         (os.path.join(cwd, 'version.txt'), '.')
     ],
     hiddenimports=[
-        'mediapipe', 'cv2', 'instagrapi', 'google.genai', 'PyQt6', 'PyQt6.QtWebEngineCore',
-        'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebChannel', 'pyautogui', 'sounddevice',
-        'keyboard', 'docx', 'pptx', 'multipart', 'passlib', 'bcrypt', 'aiohttp', 'websockets',
-        'uvicorn', 'fastapi', 'plyer', 'pydantic', 'typing_extensions', 'requests', 'beautifulsoup4',
-        'pyaudio', 'numpy'
+        'mediapipe',
+        'cv2',
+        'instagrapi',
+        'google.genai',
+        'PyQt6',
+        'PyQt6.QtWebEngineCore',
+        'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtWebChannel',
+        'pyautogui',
+        'sounddevice',
+        'keyboard',
+        'docx',
+        'pptx',
+        'multipart'
     ],
     hookspath=[],
     hooksconfig={},
@@ -39,26 +43,8 @@ a = Analysis(
     optimize=0,
 )
 
-# STRICT EXCLUSIONS FOR PERSONAL DATA
-excluded_files = [
-    'ig_browser_profile',
-    'patch_backups',
-    'patch_history.json',
-    'api_keys.json',
-    'ig_session.json',
-    'email_credentials.json',
-    'identity.json',
-    'device_location_cache.json',
-    'learned_rules.json',
-    'organizer_history.json',
-    'calendar_events.json',
-    'long_term.json',
-    'nutrition_log.json',
-    'brahma_connect.json',
-    'devices.json'
-]
-
-a.datas = [x for x in a.datas if not any(excl in x[0].replace('\\', '/') for excl in excluded_files)]
+# Filter out the ig_browser_profile cache to avoid MAX_PATH crashes and bloating the EXE
+a.datas = [x for x in a.datas if 'ig_browser_profile' not in x[0]]
 
 pyz = PYZ(a.pure)
 
@@ -67,7 +53,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='BrahmaEvo',
+    name='LisaEcho',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -78,7 +64,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(cwd, 'assets/Brahma_Lite_Logo.ico') if os.path.exists(os.path.join(cwd, 'assets/Brahma_Lite_Logo.ico')) else None,
+    icon=os.path.join(cwd, 'assets/Lisa_Lite_Logo.ico') if os.path.exists(os.path.join(cwd, 'assets/Lisa_Lite_Logo.ico')) else None,
     version=os.path.join(cwd, 'version.txt') if os.path.exists(os.path.join(cwd, 'version.txt')) else None
 )
 
@@ -89,5 +75,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='BrahmaEvo'
+    name='LisaEcho'
 )

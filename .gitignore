@@ -47,7 +47,7 @@ config/.desktop_shortcut_created
 ig_debug.log
 
 # --- Android project (excluded from GitHub) ---
-brahma-connect-android/
+lisa-connect-android/
 
 # --- Scratch / helper scripts ---
 _sweep_text.py

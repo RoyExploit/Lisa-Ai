@@ -661,9 +661,9 @@ class DashboardServer:
 </style></head>
 <body>
 <script>
-  sessionStorage.setItem('Lisa_token','{tok}');
-  sessionStorage.setItem('Lisa_key','{key}');
-  localStorage.setItem('Lisa_device_token','{dev_tok}');
+  sessionStorage.setItem('lisa_token','{tok}');
+  sessionStorage.setItem('lisa_key','{key}');
+  localStorage.setItem('lisa_device_token','{dev_tok}');
   setTimeout(function(){{location.replace('/')}},400);
 </script>
 <p>Connecting to Lisa...</p>
