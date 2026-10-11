@@ -76,13 +76,16 @@ def start() -> None:
 
     if _HUD_ORB_ENABLED:
         try:
+            from PyQt6.QtCore import Qt
             from PyQt6.QtWidgets import QApplication
             from hud_overlay import HudOverlay
 
             if QApplication.instance() is not None:
                 _hud = HudOverlay()
+                # Never steal keyboard focus when popping up over another app.
+                _hud.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
                 # Stay hidden while the main window is open; shown only
-                # on minimize via show_hud().
+                # on minimize/hide via show_hud().
             else:
                 print("[OrbBridge] HUD overlay skipped: no QApplication running.")
         except Exception as exc:

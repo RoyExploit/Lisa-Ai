@@ -9712,10 +9712,31 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
-            if self.isMinimized():
-                self.minimized.emit()
-            else:
-                self.restored.emit()
+            try:
+                if self.isMinimized():
+                    self.minimized.emit()
+                else:
+                    self.restored.emit()
+            except Exception:
+                pass
+
+    def hideEvent(self, event):
+        # Window hidden without a state change (close-to-tray / hide_main /
+        # Win+D edge behavior): still background the session into the HUD.
+        super().hideEvent(event)
+        try:
+            self.minimized.emit()
+        except Exception:
+            pass
+
+    def showEvent(self, event):
+        # Window re-shown without a state change (tray restore / show_main):
+        # take the HUD overlay back down so exactly one orb is visible.
+        super().showEvent(event)
+        try:
+            self.restored.emit()
+        except Exception:
+            pass
 
     def _on_audio_level_sig(self, level: float):
         if hasattr(self, "_bg_widget") and hasattr(self._bg_widget, "set_audio_level"):
@@ -14641,8 +14662,14 @@ class LisaUI:
             self.show_main()
 
     def _on_minimized(self):
-        self._command_bar.hide()
-        self._show_floating_icon()
+        try:
+            self._command_bar.hide()
+        except Exception:
+            pass
+        try:
+            self._show_floating_icon()
+        except Exception:
+            pass
         # App is out of view: show the transparent HUD orb so voice
         # interaction continues while working in other apps.
         try:
@@ -14652,7 +14679,10 @@ class LisaUI:
             pass
 
     def _on_restored(self):
-        self._launcher.hide()
+        try:
+            self._launcher.hide()
+        except Exception:
+            pass
         # App window is back: the in-app orb stage takes over, so hide
         # the transparent overlay to keep exactly one orb visible.
         try:
