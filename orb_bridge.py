@@ -58,6 +58,7 @@ _lock = threading.Lock()
 _hud = None            # HudOverlay instance (native external overlay)
 _started = False
 _last_state = "idle"
+_action_handler = None  # callback wired to the HUD's right-click menu actions
 
 
 def _map_state(state: str) -> str:
@@ -84,6 +85,12 @@ def start() -> None:
                 _hud = HudOverlay()
                 # Never steal keyboard focus when popping up over another app.
                 _hud.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+                # Wire the right-click options menu to the registered handler.
+                if _action_handler is not None:
+                    try:
+                        _hud.action_requested.connect(_action_handler)
+                    except Exception:
+                        pass
                 # Stay hidden while the main window is open; shown only
                 # on minimize/hide via show_hud().
             else:
@@ -121,6 +128,24 @@ def is_hud_visible() -> bool:
         return bool(_hud.isVisible())
     except Exception:
         return False
+
+
+def connect_actions(handler) -> None:
+    """Wire the HUD orb's right-click menu actions to a callback.
+
+    The callback receives the same action strings the floating launcher emits
+    (``open_app``, ``open_workspace``, ``voice_mode``, ``settings``,
+    ``hide_hud``, ``quit``). Safe to call multiple times, and works whether the
+    HUD already exists or is created later by :func:`start`.
+    """
+    global _action_handler
+    _action_handler = handler
+    if _hud is None:
+        return
+    try:
+        _hud.action_requested.connect(handler)
+    except Exception:
+        pass
 
 
 def set_state(state: str) -> None:

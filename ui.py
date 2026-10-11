@@ -14301,6 +14301,13 @@ class LisaUI:
         self._launcher.single_clicked.connect(self._toggle_workspace_sidebar)
         self._launcher.double_clicked.connect(self._on_launcher_double_clicked)
         self._launcher.action_requested.connect(self._handle_launcher_action)
+        # The single HUD orb (shown on minimize) carries the same right-click
+        # options menu as the old floating launcher; route its actions here too.
+        try:
+            import orb_bridge
+            orb_bridge.connect_actions(self._handle_launcher_action)
+        except Exception:
+            pass
         self._launcher.position_changed.connect(self._save_launcher_position)
         self._command_bar.submitted.connect(self._submit_command)
         self._command_bar.attach_clicked.connect(self._browse_attachment)
@@ -14666,12 +14673,10 @@ class LisaUI:
             self._command_bar.hide()
         except Exception:
             pass
-        try:
-            self._show_floating_icon()
-        except Exception:
-            pass
-        # App is out of view: show the transparent HUD orb so voice
-        # interaction continues while working in other apps.
+        # App is out of view: show the single transparent HUD orb (with its
+        # right-click options menu) so voice interaction continues while
+        # working in other apps. The old floating launcher icon is NOT shown
+        # anymore -- the HUD orb replaces it entirely.
         try:
             import orb_bridge
             orb_bridge.show_hud()
@@ -14807,6 +14812,19 @@ class LisaUI:
             self._show_floating_icon()
         elif action == "hide_icon":
             self._hide_launcher_with_protection()
+        elif action == "voice_mode":
+            # Toggle the microphone / listening state.
+            self._toggle_mute()
+        elif action == "settings":
+            # No dedicated settings popup; open the full app (Settings lives
+            # inside the main window).
+            self.show_main()
+        elif action == "hide_hud":
+            try:
+                import orb_bridge
+                orb_bridge.hide_hud()
+            except Exception:
+                pass
         elif action == "restart":
             self._restart_app()
         elif action == "quit":

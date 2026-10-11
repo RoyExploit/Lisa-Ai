@@ -24,8 +24,8 @@ import random
 import time
 
 from PyQt6.QtCore import Qt, QPointF, QTimer, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QGuiApplication
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtGui import QPainter, QColor, QRadialGradient, QGuiApplication, QAction
+from PyQt6.QtWidgets import QWidget, QMenu, QApplication
 
 # Same palette as particle_orb.py / hud_orb.
 STATE_COLORS = {
@@ -35,7 +35,7 @@ STATE_COLORS = {
 }
 
 _N = 520          # particle count (matches the JS renderer)
-_SIZE = 260       # widget edge length in px
+_SIZE = 180       # widget edge length in px
 _FPS = 16         # ~60 fps tick
 
 
@@ -62,6 +62,8 @@ class HudOverlay(QWidget):
     # slot onto the GUI thread where the widget lives.
     _state_sig = pyqtSignal(str)
     _amp_sig = pyqtSignal(float)
+    # Right-click menu actions (Open App, Chat, Voice, Settings, Hide, Quit).
+    action_requested = pyqtSignal(str)
 
     def __init__(self, size=_SIZE):
         super().__init__(None, Qt.WindowType.FramelessWindowHint
@@ -222,3 +224,62 @@ class HudOverlay(QWidget):
     def mouseReleaseEvent(self, event) -> None:
         self._drag_pos = None
         event.accept()
+
+    # -- right-click options menu ------------------------------------------
+
+    def contextMenuEvent(self, event) -> None:
+        """Show the same options the floating launcher offered, so the single
+        HUD orb fully replaces the old second floating icon."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background: #0c1220;
+                color: #e6f7ff;
+                border: 1px solid rgba(0, 229, 255, 0.35);
+                border-radius: 8px;
+                padding: 6px;
+            }
+            QMenu::item {
+                padding: 7px 22px 7px 16px;
+                border-radius: 6px;
+            }
+            QMenu::item:selected {
+                background: rgba(0, 229, 255, 0.20);
+                color: #00e5ff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: rgba(255, 255, 255, 0.10);
+                margin: 4px 6px;
+            }
+        """)
+
+        open_full = QAction("Open Lisa AI (Full App)", self)
+        open_full.triggered.connect(lambda: self.action_requested.emit("open_app"))
+        menu.addAction(open_full)
+
+        open_ws = QAction("Open Chat Workspace", self)
+        open_ws.triggered.connect(lambda: self.action_requested.emit("open_workspace"))
+        menu.addAction(open_ws)
+
+        menu.addSeparator()
+
+        voice_mode = QAction("Toggle Voice Mode", self)
+        voice_mode.triggered.connect(lambda: self.action_requested.emit("voice_mode"))
+        menu.addAction(voice_mode)
+
+        settings_act = QAction("Settings", self)
+        settings_act.triggered.connect(lambda: self.action_requested.emit("settings"))
+        menu.addAction(settings_act)
+
+        menu.addSeparator()
+
+        hide_act = QAction("Hide HUD Orb", self)
+        hide_act.triggered.connect(lambda: self.action_requested.emit("hide_hud"))
+        menu.addAction(hide_act)
+
+        quit_act = QAction("Quit Lisa", self)
+        quit_act.triggered.connect(lambda: self.action_requested.emit("quit"))
+        menu.addAction(quit_act)
+
+        menu.exec(event.globalPos())
