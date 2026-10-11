@@ -6,8 +6,154 @@ import win32com.client
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QProgressBar, QFileDialog, QGraphicsDropShadowEffect, QStackedWidget)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
-from PyQt6.QtGui import QIcon, QFont, QColor
-from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtGui import QIcon, QFont, QColor, QPainter, QRadialGradient
+
+APP_NAME = "Lisa AI"
+APP_VERSION = "1.0.0"
+APP_PUBLISHER = "Lisa AI"
+APP_EXE = "LisaAI.exe"
+UNINSTALL_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\LisaAI"
+
+
+def _write_uninstall_entry(target_dir, setup_source=""):
+    """Register in Add/Remove Programs so users can find + uninstall the app."""
+    try:
+        import winreg
+        exe_path = os.path.join(target_dir, APP_EXE)
+        uninstaller = os.path.join(target_dir, "uninstall.bat")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, APP_VERSION)
+            winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, APP_PUBLISHER)
+            winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, target_dir)
+            winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, exe_path)
+            # Add/Remove Programs needs these to show size + a real uninstall command
+            try:
+                size = sum(os.path.getsize(os.path.join(r, f))
+                           for r, _, fs in os.walk(target_dir) for f in fs)
+                winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, size // 1024)
+            except Exception:
+                pass
+            if os.path.exists(uninstaller):
+                winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ,
+                                  '"' + uninstaller + '"')
+                winreg.SetValueEx(key, "QuietUninstallString", 0, winreg.REG_SZ,
+                                  '"' + uninstaller + '"')
+            else:
+                winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ,
+                                  '"' + exe_path + '"')
+            if setup_source:
+                winreg.SetValueEx(key, "InstallSource", 0, winreg.REG_SZ, setup_source)
+        return True
+    except Exception as e:
+        print(f"Failed to write uninstall entry: {e}")
+        return False
+
+
+def _remove_uninstall_entry():
+    try:
+        import winreg
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
+    except Exception:
+        pass
+
+
+def _create_shortcut(shell, folder_kind, name, target, workdir, icon):
+    """Create a .lnk; returns True on success. Raises nothing."""
+    try:
+        folder = shell.SpecialFolders(folder_kind)
+        path = os.path.join(folder, name)
+        sc = shell.CreateShortCut(path)
+        sc.Targetpath = target
+        sc.WorkingDirectory = workdir
+        if icon and os.path.exists(icon):
+            sc.IconLocation = icon
+        sc.WindowStyle = 1
+        sc.save()
+        return os.path.exists(path)
+    except Exception as e:
+        print(f"Failed to create {folder_kind} shortcut: {e}")
+        return False
+
+
+def _write_uninstaller(target_dir):
+    """Create an uninstall.bat that removes the app + shortcuts + registry entry."""
+    try:
+        bat_path = os.path.join(target_dir, "uninstall.bat")
+        desktop = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop", "Lisa AI.lnk")
+        programs = os.path.join(
+            os.environ.get("APPDATA", ""), "Microsoft", "Windows",
+            "Start Menu", "Programs", "Lisa AI.lnk")
+        script = (
+            "@echo off\r\n"
+            "echo Uninstalling Lisa AI...\r\n"
+            f'reg delete "HKCU\\{UNINSTALL_KEY}" /f >nul 2>&1\r\n'
+            f'if exist "{desktop}" del /f /q "{desktop}"\r\n'
+            f'if exist "{programs}" del /f /q "{programs}"\r\n'
+            "timeout /t 2 /nobreak >nul\r\n"
+            f'rmdir /s /q "{target_dir}"\r\n'
+            "echo Done.\r\n"
+        )
+        with open(bat_path, "w") as f:
+            f.write(script)
+        return bat_path
+    except Exception as e:
+        print(f"Failed to write uninstaller: {e}")
+        return None
+
+
+class NativeOrbBackdrop(QWidget):
+    """Black-screen particle orb backdrop (no WebEngine, no old web UI)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        import math
+        import random
+        self._n = 260
+        golden = math.pi * (3.0 - math.sqrt(5.0))
+        self._pts = []
+        for i in range(self._n):
+            y = 1.0 - (i / float(self._n - 1)) * 2.0
+            r = math.sqrt(max(0.0, 1.0 - y * y))
+            th = golden * i
+            self._pts.append((math.cos(th) * r, y, math.sin(th) * r))
+        self._phase = [random.uniform(0, math.tau) for _ in range(self._n)]
+        self._angle = 0.0
+        self._t0 = time.time()
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(50)
+
+    def _tick(self):
+        self._angle += 0.01
+        self.update()
+
+    def paintEvent(self, _event):
+        import math
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(4, 6, 10))
+        w, h = max(1, self.width()), max(1, self.height())
+        cx, cy = w / 2.0, h / 2.0
+        r0 = min(w, h) * 0.30
+        t = time.time() - self._t0
+        grad = QRadialGradient(cx, cy, r0 * 1.8)
+        alpha = int(255 * (0.10 + 0.10 * (0.5 + 0.5 * math.sin(t * 1.2))))
+        grad.setColorAt(0.0, QColor(0, 229, 255, alpha))
+        grad.setColorAt(1.0, QColor(0, 229, 255, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(grad)
+        p.drawRect(0, 0, w, h)
+        ca, sa = math.cos(self._angle), math.sin(self._angle)
+        for i, (x, y, z) in enumerate(self._pts):
+            amp = 0.5 + 0.5 * math.sin(t * 1.5 + self._phase[i])
+            rad = r0 * (1.0 + 0.18 * amp)
+            sx = cx + (x * ca - z * sa) * rad
+            sy = cy + y * rad * 0.9
+            b = int(90 + 120 * amp)
+            p.setBrush(QColor(0, min(255, b + 60), 255))
+            p.drawEllipse(int(sx), int(sy), 2, 2)
+        p.end()
 
 class InstallThread(QThread):
     progress = pyqtSignal(int)
@@ -56,41 +202,33 @@ class InstallThread(QThread):
 
             self.progress.emit(80)
             self.status.emit("Creating shortcuts...")
-            
-            # Create Desktop Shortcut
-            exe_path = os.path.join(self.target_dir, 'LisaAI.exe')
-            if os.path.exists(exe_path):
+
+            try:
                 shell = win32com.client.Dispatch("WScript.Shell")
-                
-                # Dynamically resolve Desktop path (handles OneDrive, moved folders, etc.)
-                desktop = shell.SpecialFolders("Desktop")
-                shortcut_path = os.path.join(desktop, "Lisa AI.lnk")
-                
-                try:
-                    shortcut = shell.CreateShortCut(shortcut_path)
-                    shortcut.Targetpath = exe_path
-                    shortcut.WorkingDirectory = self.target_dir
-                    shortcut.IconLocation = os.path.join(self.target_dir, 'assets', 'Lisa_Lite_Logo.ico')
-                    shortcut.WindowStyle = 1 # Normal window
-                    shortcut.save()
-                except Exception as e:
-                    print(f"Failed to create desktop shortcut: {e}")
-                
-                # Start menu (dynamically resolve Programs path)
-                try:
-                    start_menu = shell.SpecialFolders("Programs")
-                    shortcut_path_sm = os.path.join(start_menu, "Lisa AI.lnk")
-                    shortcut_sm = shell.CreateShortCut(shortcut_path_sm)
-                    shortcut_sm.Targetpath = exe_path
-                    shortcut_sm.WorkingDirectory = self.target_dir
-                    shortcut_sm.IconLocation = os.path.join(self.target_dir, 'assets', 'Lisa_Lite_Logo.ico')
-                    shortcut_sm.WindowStyle = 1
-                    shortcut_sm.save()
-                except Exception as e:
-                    print(f"Failed to create start menu shortcut: {e}")
+            except Exception:
+                shell = None
+
+            # Create Desktop + Start Menu shortcuts (verified, not assumed)
+            exe_path = os.path.join(self.target_dir, APP_EXE)
+            icon_path = os.path.join(self.target_dir, 'assets', 'Lisa_Lite_Logo.ico')
+            desktop_ok = start_ok = False
+            if os.path.exists(exe_path) and shell is not None:
+                desktop_ok = _create_shortcut(shell, "Desktop", "Lisa AI.lnk",
+                                              exe_path, self.target_dir, icon_path)
+                start_ok = _create_shortcut(shell, "Programs", "Lisa AI.lnk",
+                                            exe_path, self.target_dir, icon_path)
 
             self.progress.emit(100)
-            self.status.emit("Installation Complete!")
+            self.status.emit("Registering app...")
+
+            _write_uninstaller(self.target_dir)
+            _write_uninstall_entry(self.target_dir)
+
+            self.progress.emit(100)
+            if not desktop_ok or not start_ok:
+                self.status.emit("Installation Complete! (Note: a shortcut could not be created.)")
+            else:
+                self.status.emit("Installation Complete!")
             time.sleep(0.5)
             self.finished.emit()
             
@@ -109,26 +247,21 @@ class InstallWizard(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Background Container
+        # Background Container (black screen + native orb; old WebEngine
+        # golden-orb page removed project-wide)
         self.bg_container = QWidget(self)
         self.bg_container.resize(self.size())
-        
-        # Web Engine View for Orb
-        self.web_view = QWebEngineView(self.bg_container)
-        self.web_view.resize(self.size())
-        
-        # Disable web view background to blend with transparent main window if needed
-        self.web_view.page().setBackgroundColor(Qt.GlobalColor.transparent)
+        self.bg_container.setStyleSheet("background: #04060a;")
 
-        # Find assets folder
+        # Native orb backdrop (pure Qt paint, no WebEngine, no old web UI)
+        self.orb_backdrop = NativeOrbBackdrop(self.bg_container)
+        self.orb_backdrop.resize(self.size())
+
+        # Find assets folder (payload root inside the setup bundle)
         if hasattr(sys, '_MEIPASS'):
             self.base_dir = sys._MEIPASS
         else:
             self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-        orb_path = os.path.join(self.base_dir, 'assets', 'web_background', 'index.html')
-        if os.path.exists(orb_path):
-            self.web_view.setUrl(QUrl.fromLocalFile(orb_path))
 
         # Overlay UI
         self.overlay = QWidget(self)
@@ -275,7 +408,8 @@ class InstallWizard(QWidget):
         
     def resizeEvent(self, event):
         self.bg_container.resize(self.size())
-        self.web_view.resize(self.size())
+        if hasattr(self, 'orb_backdrop'):
+            self.orb_backdrop.resize(self.size())
         self.overlay.resize(self.size())
         super().resizeEvent(event)
 
