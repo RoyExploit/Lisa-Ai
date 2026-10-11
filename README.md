@@ -27,8 +27,8 @@
 ### Particle Orb + HUD Orb UIs
 Lisa AI ships with two reactive orb interfaces driven by a shared state bridge (`orb_bridge.py`):
 
-- **Main Particle Orb** (`ui_particle/`) - A Pygame particle-sphere visualizer. Idle = gentle breathing, Listening = dots react to your live microphone, Speaking = dots jump with your TTS audio.
-- **External HUD Orb** (`hud_orb/`) - A transparent, always-on-top, draggable Electron overlay. It stays on screen even when the main app is minimized, so you can talk to Lisa while working in other apps. Includes optional ONNX wake-word triggering.
+- **Main Particle Orb** (`orb_stage.py`) - Embedded particle-sphere visualizer shown in the app window. Idle = gentle breathing, Listening = dots react to your live microphone, Speaking = dots jump with your TTS audio.
+- **External HUD Orb** (`hud_overlay.py`) - A transparent, always-on-top, draggable native overlay. It stays on screen even when the main app is minimized, so you can talk to Lisa while working in other apps.
 
 ### Holographic Hardware Assembler & Circuit HUD
 - Screen and voice part recognition for microcontrollers, sensors, and passives.
