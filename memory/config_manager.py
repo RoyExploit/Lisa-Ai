@@ -90,5 +90,21 @@ def save_wake_word_enabled(enabled: bool) -> None:
     set_setting("wake_word_enabled", bool(enabled))
 
 
+# --- Assistant Name (user-settable persona / wake name)
+
+DEFAULT_ASSISTANT_NAME = "Lisa"
+
+
+def get_assistant_name() -> str:
+    name = str(get_setting("assistant_name", DEFAULT_ASSISTANT_NAME) or "").strip()
+    return name or DEFAULT_ASSISTANT_NAME
+
+
+def set_assistant_name(name: str) -> None:
+    name = (name or "").strip()
+    if name:
+        set_setting("assistant_name", name[:40])
+
+
 def get_brief_enabled() -> bool:
     return bool(get_setting("brief_enabled", True))

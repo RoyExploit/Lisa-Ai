@@ -530,18 +530,42 @@ def _looks_like_daily_briefing_request(text: str) -> bool:
     return any(phrase in normalized for phrase in phrases)
 
 
-def _wakeword_detected(text: str) -> bool:
-    """True when the transcript contains the wake name as its own word.
+_NAME_CACHE = {"name": None, "at": 0.0}
 
-    Strict word-boundary matching only. Bare greetings ("hi", "hey") and
-    substring matches ("this" contains "hi") caused constant false wakes, so
-    they are deliberately excluded.
+
+def _assistant_name() -> str:
+    """Configured assistant name (cached for 5s - read per transcription chunk)."""
+    now = time.monotonic()
+    if _NAME_CACHE["name"] is None or now - _NAME_CACHE["at"] > 5.0:
+        try:
+            from memory import config_manager
+            _NAME_CACHE["name"] = config_manager.get_assistant_name()
+        except Exception:
+            _NAME_CACHE["name"] = "Lisa"
+        _NAME_CACHE["at"] = now
+    return _NAME_CACHE["name"]
+
+
+def _wakeword_tokens() -> set:
+    """Wake tokens derived from the configured assistant name (words >= 3 chars)."""
+    t = re.sub(r"[^a-z0-9\s]+", " ", (_assistant_name() or "lisa").lower())
+    words = {w for w in t.split() if len(w) >= 3}
+    return words or {"lisa"}
+
+
+def _wakeword_detected(text: str) -> bool:
+    """True when the transcript contains the assistant's name as its own word.
+
+    Strict word-boundary matching against the user-configured assistant name.
+    Bare greetings ("hi", "hey") and substring matches ("this" contains "hi")
+    caused constant false wakes, so they are deliberately excluded.
     """
     t = re.sub(r"[^a-z0-9\s]+", " ", (text or "").lower())
     words = [w for w in t.split() if w]
     if not words:
         return False
-    return any(w in {"lisa", "lisaai"} for w in words)
+    tokens = _wakeword_tokens()
+    return any(w in tokens for w in words)
 
 
 def _build_task_plan(text: str) -> list[str]:
@@ -2144,7 +2168,7 @@ class LisaLive:
                     continue
                 self.ui.set_muted_state(True)
                 self.ui.write_log(
-                    f"SYS: Going to sleep - idle for {int(AUTO_SLEEP_IDLE_S)}s. Say 'Lisa AI' to wake me."
+                    f"SYS: Going to sleep - idle for {int(AUTO_SLEEP_IDLE_S)}s. Say '{_assistant_name()}' to wake me."
                 )
             except Exception as e:
                 print(f"[AutoSleep] Error: {e}")
@@ -2173,6 +2197,21 @@ class LisaLive:
             self.ui.write_log("SYS: Wake received from phone.")
         except Exception as e:
             print(f"[RemoteWake] Error: {e}")
+
+    def _on_local_wakeword(self):
+        """Local ONNX wake-word hit: wake from standby on-device.
+
+        Only unmutes when currently asleep. The ONNX engine keeps listening
+        while awake too (cheap), but hits there are no-ops so the mic is
+        never yanked mid-conversation.
+        """
+        try:
+            self._reset_idle_activity()
+            if self.ui.muted:
+                self.ui.set_muted_state(False, wakeword=True)
+                self.ui.write_log("SYS: Local wake word detected. Mic active.")
+        except Exception as e:
+            print(f"[WakeWord] Trigger error: {e}")
 
     def _on_text_command(self, text: str, source: str = "local"):
         self._reset_idle_activity()
@@ -4034,6 +4073,11 @@ class LisaLive:
         mem_str    = format_memory_for_prompt(memory)
         sys_prompt = _load_system_prompt()
 
+        # User-configured assistant name: rebrand the persona everywhere in the prompt.
+        _name = _assistant_name()
+        if _name and _name != "Lisa":
+            sys_prompt = sys_prompt.replace("Lisa AI", _name).replace("Lisa", _name)
+
         now      = datetime.now()
         time_str = now.strftime("%A, %B %d, %Y - %I:%M %p")
         time_ctx = (
@@ -4062,8 +4106,8 @@ class LisaLive:
             parts.append(mem_str)
         parts.append(sys_prompt)
         parts.append(
-            "Wake-word mode: if the microphone is muted, still listen for the words 'Lisa AI', 'hey', 'hi', and 'hello'. "
-            "When you hear one of these activation cues, keep the session friendly and concise, "
+            f"Wake-word mode: your name is '{_name}'. If the microphone is muted, still listen for the name '{_name}' "
+            "and for greetings. When you hear your name used to address you, keep the session friendly and concise, "
             "and wait for the user's next command. "
             "IMPORTANT: Do NOT speak an unprompted generic greeting (like 'Thank you, how can I help you?') upon connecting. "
             "Remain completely silent until the user speaks to you or asks a question."
@@ -5120,6 +5164,11 @@ class LisaLive:
             pass
 
         self._attention_monitor.start()
+        try:
+            from core.wake_word import start_local_wakeword
+            start_local_wakeword(on_trigger=self._on_local_wakeword)
+        except Exception as e:
+            print(f"[WakeWord] Local ONNX engine unavailable: {e}")
         try:
             self.ui.boot_set_step_status("Start attention monitor", "done")
             self.ui.boot_set_progress(12, "Attention monitor online")

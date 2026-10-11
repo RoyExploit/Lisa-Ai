@@ -65,11 +65,25 @@ class IdentityService:
     # Assistant methods
     def get_assistant_name(self) -> str:
         val = self.data["assistant"].get("name", "Lisa")
-        return val if val is not None else "Lisa"
-        
+        if val:
+            return val
+        # Fall back to the settings store (Voice tab editor) so the cloud
+        # text matcher, prompts and UI never diverge on the wake name.
+        try:
+            from memory import config_manager
+            return config_manager.get_assistant_name()
+        except Exception:
+            return "Lisa"
+
     def set_assistant_name(self, name: str):
+        name = (name or "").strip() or "Lisa"
         self.data["assistant"]["name"] = name
         self.save()
+        try:
+            from memory import config_manager
+            config_manager.set_assistant_name(name)
+        except Exception:
+            pass
 
     def get_application_name(self) -> str:
         val = self.data["assistant"].get("application_name", "Lisa AI")

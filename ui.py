@@ -8523,6 +8523,7 @@ class MainWindow(QMainWindow):
     discord_status_changed = pyqtSignal(str)
     minimized = pyqtSignal()
     restored = pyqtSignal()
+    _wake_sig = pyqtSignal()  # local-ONNX wake hits arrive from a mic thread
     _hud_operation_sig = pyqtSignal(dict)
     _hud_deliverable_sig = pyqtSignal(dict)
     _circuit_hud_sig = pyqtSignal(object)
@@ -8647,6 +8648,7 @@ class MainWindow(QMainWindow):
 
         self._log_sig.connect(self._on_log_text)
         self._state_sig.connect(self._apply_state)
+        self._wake_sig.connect(self._on_wake_signal)
         self._briefing_sig.connect(self._apply_daily_briefing)
         self._briefing_hide_sig.connect(self._schedule_daily_briefing_hide)
         self._attention_sig.connect(self._show_attention_alert)
@@ -9245,6 +9247,34 @@ class MainWindow(QMainWindow):
             sound_mgr.play_listening_start()
 
     def set_muted_state(self, muted: bool, *, wakeword: bool = False):
+        """Thread-safe entry point: GUI thread applies inline, anything else
+        (dashboard WAKE handler, local-ONNX mic thread) hops via _wake_sig."""
+        try:
+            from PyQt6.QtCore import QThread as _QThread
+            on_gui = _QThread.currentThread() is self.thread()
+        except Exception:
+            on_gui = True
+        if on_gui:
+            self._apply_muted_state(muted, wakeword=wakeword)
+            return
+        self._pending_wake = (bool(muted), bool(wakeword))
+        try:
+            self._wake_sig.emit()
+        except Exception:
+            pass
+
+    def _on_wake_signal(self):
+        """Runs on the GUI thread: apply a pending cross-thread wake request."""
+        pending = getattr(self, "_pending_wake", None)
+        self._pending_wake = None
+        if pending is None:
+            pending = (False, True)  # default: unmute into listening
+        try:
+            self._apply_muted_state(bool(pending[0]), wakeword=bool(pending[1]))
+        except Exception:
+            pass
+
+    def _apply_muted_state(self, muted: bool, *, wakeword: bool = False):
         muted = bool(muted)
         if muted == self._muted and not wakeword:
             return

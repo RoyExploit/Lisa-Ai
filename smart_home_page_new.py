@@ -973,13 +973,43 @@ class LisaHomePage(QWidget):
         
         wake_lay = QVBoxLayout()
         wake_lay.setSpacing(2)
-        lbl = QLabel("Wake word")
+        lbl = QLabel("Assistant name / wake word")
         lbl.setFont(QFont("Segoe UI", 9))
         lbl.setStyleSheet(f"color: {TEXT_DIM};")
         
-        word = QLabel("Lisa AI")
+        try:
+            from memory import config_manager as _cfg
+            _name = _cfg.get_assistant_name()
+        except Exception:
+            _name = "Lisa"
+        word = QLineEdit(_name)
+        word.setMaxLength(40)
         word.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        word.setStyleSheet(f"color: {ACCENT};")
+        word.setFixedWidth(160)
+        word.setToolTip("Set your assistant's name. Say it to wake her, e.g. 'Hey Lisa'.")
+        word.setStyleSheet(f"""
+            QLineEdit {{
+                background: rgba(0, 229, 255, 0.06);
+                color: {ACCENT};
+                border: 1px solid rgba(0, 229, 255, 0.25);
+                border-radius: 6px;
+                padding: 3px 8px;
+            }}
+            QLineEdit:focus {{ border: 1px solid {ACCENT}; }}
+        """)
+
+        def _save_name():
+            text = (word.text() or "").strip()
+            if not text:
+                word.setText(_name)
+                return
+            try:
+                from memory import config_manager as _cfg
+                _cfg.set_assistant_name(text)
+            except Exception:
+                pass
+
+        word.editingFinished.connect(_save_name)
         
         wake_lay.addWidget(lbl)
         wake_lay.addWidget(word)

@@ -44,3 +44,15 @@ pygame-ce>=2.5
 # --- Build / packaging (only needed to rebuild the offline installer) ---
 pyinstaller>=6.0
 pywin32
+
+# --- Local ONNX wake word (offline, on-device; auto-disabled if missing) ---
+# NOTE (Python 3.14): openwakeword's librosa/numba chain has no 3.14 wheels and
+# pip will churn in dependency resolution. The ONNX inference path does NOT
+# need librosa, so install the package without its unused deps:
+#   pip install onnxruntime tqdm
+#   pip install openwakeword --no-deps
+# Then seed the bundled ONNX models once:
+#   python -c "from openwakeword.utils import download_models; download_models(model_names=['hey_jarvis_v0.1'])"
+# (The packaged LisaAI_Setup.exe already bundles all of this — no pip needed.)
+openwakeword>=0.6.0
+onnxruntime>=1.17.0

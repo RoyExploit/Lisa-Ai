@@ -2,6 +2,8 @@
 import os
 import sys
 
+from PyInstaller.utils.hooks import collect_data_files
+
 cwd = os.path.abspath(os.getcwd())
 
 a = Analysis(
@@ -23,13 +25,13 @@ a = Analysis(
         (os.path.join(cwd, 'README.md'), '.'),
         (os.path.join(cwd, 'requirements.txt'), '.'),
         (os.path.join(cwd, 'version.txt'), '.')
-    ],
+    ] + collect_data_files('openwakeword'),
     hiddenimports=[
         'mediapipe', 'cv2', 'instagrapi', 'google.genai', 'PyQt6', 'PyQt6.QtWebEngineCore',
         'PyQt6.QtWebEngineWidgets', 'PyQt6.QtWebChannel', 'pyautogui', 'sounddevice',
         'keyboard', 'docx', 'pptx', 'multipart', 'passlib', 'bcrypt', 'aiohttp', 'websockets',
         'uvicorn', 'fastapi', 'plyer', 'pydantic', 'typing_extensions', 'requests', 'beautifulsoup4',
-        'numpy'
+        'numpy', 'openwakeword', 'onnxruntime', 'librosa', 'soundfile'
     ],
     hookspath=[],
     hooksconfig={},
