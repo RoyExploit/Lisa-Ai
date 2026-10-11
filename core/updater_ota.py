@@ -33,7 +33,7 @@ def check_for_updates() -> dict | None:
     """Checks the GitHub API for a new release. Returns release data if an update is available."""
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(url, headers={'User-Agent': 'LisaEcho-OTA'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'LisaAI-OTA'})
         with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode('utf-8'))
             
@@ -67,9 +67,9 @@ def download_and_apply_update(url: str, ui_callback=None):
         from core.user_paths import get_user_data_dir
         update_dir = get_user_data_dir() / "updates"
         update_dir.mkdir(parents=True, exist_ok=True)
-        setup_path = update_dir / "LisaEcho_Setup_Update.exe"
+        setup_path = update_dir / "LisaAI_Setup_Update.exe"
         
-        req = urllib.request.Request(url, headers={'User-Agent': 'LisaEcho-OTA'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'LisaAI-OTA'})
         with urllib.request.urlopen(req, timeout=15) as response:
             total_size = int(response.info().get('Content-Length', 0))
             downloaded = 0
