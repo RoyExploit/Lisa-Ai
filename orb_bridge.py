@@ -176,6 +176,33 @@ def feed_amplitude(level: float) -> None:
             pass
 
 
+def get_hud():
+    """Return the live HUD orb widget, or None if unavailable.
+
+    Used by the UI to anchor floating widgets (command bar, control panel)
+    to the orb and to restore a saved orb position.
+    """
+    return _hud
+
+
+def move_hud(x: int, y: int) -> None:
+    """Move the HUD orb to an absolute screen position (best-effort)."""
+    if _hud is not None:
+        try:
+            _hud.move(int(x), int(y))
+        except Exception:
+            pass
+
+
+def raise_hud() -> None:
+    """Raise the HUD orb above sibling windows (best-effort)."""
+    if _hud is not None:
+        try:
+            _hud.raise_()
+        except Exception:
+            pass
+
+
 def stop() -> None:
     """Shut down the HUD overlay."""
     global _hud, _started
