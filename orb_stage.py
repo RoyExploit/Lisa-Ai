@@ -87,6 +87,13 @@ class OrbStage(QWidget):
         self._level_at = 0.0
         self._angle = 0.0
         self._t0 = time.time()
+        # Horizontal insets (px) the orb must stay inside so it never sits under
+        # the left rail or the right chat sidebar. 0 = use the full widget.
+        self._inset_left = 0
+        self._inset_right = 0
+        # 1.0 = full glow (dashboard); <1.0 fades the orb so content pages
+        # (settings/home/devices) stay readable on top of it.
+        self._dim = 1.0
 
         self._state_sig.connect(self._do_set_ai_state)
         self._audio_sig.connect(self._do_set_audio_level)
@@ -102,6 +109,17 @@ class OrbStage(QWidget):
             self._state_sig.emit(str(state or "idle"))
         except Exception:
             pass
+
+    def set_stage_insets(self, left: int = 0, right: int = 0) -> None:
+        """Constrain the orb to the visible stage between the left rail and the
+        right chat sidebar so it never sits under a panel. 0 = no inset."""
+        self._inset_left = max(0, int(left))
+        self._inset_right = max(0, int(right))
+
+    def set_dim(self, factor: float) -> None:
+        """1.0 = full glow; <1.0 fades the orb so overlaying content stays
+        readable. Clamped to [0.0, 1.0]."""
+        self._dim = max(0.0, min(1.0, float(factor)))
 
     def set_audio_level(self, level: float) -> None:
         try:
@@ -148,8 +166,13 @@ class OrbStage(QWidget):
     def paintEvent(self, _event) -> None:
         w = max(1, self.width())
         h = max(1, self.height())
-        cx, cy = w / 2.0, h / 2.0
-        r0 = min(w, h) * 0.30
+        # Visible stage = the free area between the left rail and right sidebar.
+        vis_l = min(self._inset_left, w - 1)
+        vis_r = max(vis_l + 1, w - self._inset_right)
+        vis_w = max(1, vis_r - vis_l)
+        cx, cy = (vis_l + vis_r) / 2.0, h / 2.0
+        r0 = min(vis_w, h) * 0.30
+        dim = self._dim
 
         col = STATE_COLORS[self._state]
         base, hot = col["base"], col["hot"]
@@ -158,7 +181,7 @@ class OrbStage(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         grad = QRadialGradient(QPointF(cx, cy), r0 * 1.6)
-        alpha = int(255 * (0.06 + self._amp * 0.22))
+        alpha = int(255 * (0.06 + self._amp * 0.22) * dim)
         grad.setColorAt(0.0, QColor(base[0], base[1], base[2], alpha))
         grad.setColorAt(1.0, QColor(base[0], base[1], base[2], 0))
         p.setPen(Qt.PenStyle.NoPen)
@@ -169,7 +192,7 @@ class OrbStage(QWidget):
         ca, sa = math.cos(self._angle), math.sin(self._angle)
         tilt = math.radians(18.0)
         ct, st = math.cos(tilt), math.sin(tilt)
-        fov = 620.0 * min(w, h) / 760.0
+        fov = 620.0 * min(vis_w, h) / 760.0
 
         pts = []
         for i in range(self._count):
@@ -188,7 +211,7 @@ class OrbStage(QWidget):
             e = min(1.0, self._amp * 1.6 * self._jit[i])
             c = _lerp(base, hot, e * (0.4 + 0.6 * depth))
             rp = 0.9 + 1.1 * sc
-            p.setBrush(QColor(c[0], c[1], c[2]))
+            p.setBrush(QColor(c[0], c[1], c[2], int(255 * dim)))
             p.drawEllipse(QPointF(sx, sy), rp, rp)
 
         p.end()

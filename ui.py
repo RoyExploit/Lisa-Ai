@@ -343,6 +343,24 @@ class BackgroundWidget(QWidget):
             except Exception:
                 pass
 
+    def set_stage_insets(self, left: int = 0, right: int = 0) -> None:
+        """Constrain the embedded orb to the visible stage (between the left
+        rail and right chat sidebar) so it never sits under a panel."""
+        if self._orb_stage is not None:
+            try:
+                self._orb_stage.set_stage_insets(left, right)
+            except Exception:
+                pass
+
+    def set_stage_dim(self, factor: float) -> None:
+        """Fade the embedded orb (1.0 = full glow) so overlaying content pages
+        (settings/home/devices) stay readable on top of it."""
+        if self._orb_stage is not None:
+            try:
+                self._orb_stage.set_dim(factor)
+            except Exception:
+                pass
+
     def showEvent(self, event):
         super().showEvent(event)
         if self._web_view is None and WEB_ENGINE_AVAILABLE:
@@ -8591,6 +8609,28 @@ class MainWindow(QMainWindow):
             self._settings_sidebar.set_controller(bridge)
         self._set_page(self._current_page)
 
+    def _sync_orb_stage(self):
+        """Keep the embedded orb centered in the visible free stage: shift it
+        left of the chat sidebar, scale to fit, and dim it on content pages so
+        settings/home/devices stay readable. Called on resize, sidebar toggle
+        and page switch."""
+        try:
+            bg = getattr(self, "_bg_widget", None)
+            if bg is None or getattr(bg, "_orb_stage", None) is None:
+                return
+            # Right chat sidebar is visible only on the dashboard page.
+            rw = 0
+            rp = getattr(self, "_right_panel", None)
+            if rp is not None and rp.isVisible() and not getattr(self, "_right_collapsed", False):
+                rw = rp.width() or _RIGHT_W
+            bg.set_stage_insets(0, rw)
+            # Dim the orb on content pages so overlaid text/controls read clearly.
+            page = getattr(self, "_current_page", "dashboard")
+            dim = 1.0 if page == "dashboard" else 0.35
+            bg.set_stage_dim(dim)
+        except Exception:
+            pass
+
     def _set_page(self, page: str):
         self._current_page = page
         if hasattr(self, "_center_stack") and isinstance(self._center_stack, QStackedWidget):
@@ -8631,6 +8671,7 @@ class MainWindow(QMainWindow):
                 self._settings_sidebar.refresh()
             except Exception:
                 pass
+        self._sync_orb_stage()
 
     def set_lisa_connect_service(self, service):
         self._lisa_connect = service
@@ -8658,6 +8699,7 @@ class MainWindow(QMainWindow):
             self._position_confirm_overlay()
         if getattr(self, '_memory_overlay', None) and self._memory_overlay.isVisible():
             self._position_memory_overlay()
+        self._sync_orb_stage()
 
     def _tick_clock(self):
         if hasattr(self, "_clock_lbl") and self._clock_lbl is not None:
