@@ -127,6 +127,7 @@ SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE          = 1024
 LIVE_CONNECT_TIMEOUT = 12
+AUTO_SLEEP_IDLE_S = 130  # seconds of no conversation before Lisa auto-sleeps into wake-word standby
 
 
 def _get_api_key() -> str:
@@ -530,23 +531,17 @@ def _looks_like_daily_briefing_request(text: str) -> bool:
 
 
 def _wakeword_detected(text: str) -> bool:
+    """True when the transcript contains the wake name as its own word.
+
+    Strict word-boundary matching only. Bare greetings ("hi", "hey") and
+    substring matches ("this" contains "hi") caused constant false wakes, so
+    they are deliberately excluded.
+    """
     t = re.sub(r"[^a-z0-9\s]+", " ", (text or "").lower())
     words = [w for w in t.split() if w]
     if not words:
         return False
-    phrases = (
-        "Lisa AI",
-        "hey Lisa AI",
-        "hi Lisa AI",
-        "hello Lisa AI",
-        "hey",
-        "hi",
-        "hello",
-    )
-    compact = " ".join(words)
-    if compact in phrases or any(p in compact for p in phrases):
-        return True
-    return any(word in {"Lisa AI", "hey", "hi", "hello"} for word in words)
+    return any(w in {"lisa", "lisaai"} for w in words)
 
 
 def _build_task_plan(text: str) -> list[str]:
@@ -2088,13 +2083,6 @@ class LisaLive:
         except Exception:
             pass
         self._last_activity = time.monotonic()
-        self._idle_prompts = [
-            "Hey, you there?",
-            "Yo, get alive.",
-            "How may I help, bro?",
-            "Need anything?",
-            "I'm here if you want me.",
-        ]
         self._idle_speech_thread = threading.Thread(target=self._idle_speech_loop, daemon=True)
         self._idle_speech_thread.start()
 
@@ -2124,52 +2112,42 @@ class LisaLive:
     def _reset_idle_activity(self):
         self._last_activity = time.monotonic()
 
-    def _should_announce_idle(self) -> bool:
+    def _should_auto_sleep(self) -> bool:
+        """True when Lisa has been idle long enough to drop back to standby."""
         if self.ui.muted:
-            return False
+            return False                  # already asleep
         if self._is_speaking:
-            return False
+            return False                  # talking
         if self._meeting_active:
-            return False
+            return False                  # meeting in progress
         if self._pending_attention:
-            return False
-        if time.monotonic() - self._last_activity < 240:
+            return False                  # waiting on the user for something
+        if getattr(self, "_reply_mode", False):
+            return False                  # asked a question, awaiting the reply
+        if getattr(self, "_ptt_enabled", False):
+            return False                  # push-to-talk users hold the mic by hand
+        state = str(getattr(self.ui, "state", "") or "").lower()
+        if state in ("executing", "thinking"):
+            return False                  # busy working on something
+        if time.monotonic() - self._last_activity < AUTO_SLEEP_IDLE_S:
             return False
         return True
 
     def _idle_speech_loop(self):
-        try:
-            from actions.proactive import ProactiveEngine
-            engine = ProactiveEngine(min_silence_secs=300, check_cooldown=600)  # Shorter defaults for testing
-        except ImportError:
-            engine = None
-
+        """Auto-standby: after AUTO_SLEEP_IDLE_S of no conversation Lisa mutes
+        herself into wake-word standby. The old proactive nagger ("Hey, you
+        there?") is retired - sleeping replaces it."""
         while True:
-            time.sleep(60.0)
-            if not engine:
-                continue
-            
+            time.sleep(10.0)
             try:
-                if self.ui.muted or self._is_speaking or self._meeting_active or self._pending_attention:
+                if not self._should_auto_sleep():
                     continue
-                
-                # Check if it should trigger using the engine's time monotonic logic
-                if engine.should_trigger(self._last_activity):
-                    engine.mark_triggered()
-                    prompt = engine.build_prompt(memory={})
-                    
-                    if self.session and self._loop:
-                        import asyncio
-                        async def _send():
-                            try:
-                                await self.session.send(input=prompt, end_of_turn=True)
-                            except Exception as e:
-                                print(f"[Proactive] Error: {e}")
-                        asyncio.run_coroutine_threadsafe(_send(), self._loop)
-                        self._reset_idle_activity()
-                    
+                self.ui.set_muted_state(True)
+                self.ui.write_log(
+                    f"SYS: Going to sleep - idle for {int(AUTO_SLEEP_IDLE_S)}s. Say 'Lisa AI' to wake me."
+                )
             except Exception as e:
-                print(f"[Proactive] Error: {e}")
+                print(f"[AutoSleep] Error: {e}")
 
     def _make_remote_key(self):
         if self._dashboard is None:
@@ -2185,6 +2163,16 @@ class LisaLive:
             self.ui.notify_phone_connected()
         except Exception:
             pass
+
+    def _on_remote_wake(self):
+        """WAKE button on the phone dashboard: unmute into listening."""
+        try:
+            self._reset_idle_activity()
+            if self.ui.muted:
+                self.ui.set_muted_state(False, wakeword=True)
+            self.ui.write_log("SYS: Wake received from phone.")
+        except Exception as e:
+            print(f"[RemoteWake] Error: {e}")
 
     def _on_text_command(self, text: str, source: str = "local"):
         self._reset_idle_activity()
@@ -4827,7 +4815,7 @@ class LisaLive:
             return
         try:
             self._dashboard.set_connect_callback(self._on_phone_connected)
-            self._dashboard.set_wake_callback(lambda: None)
+            self._dashboard.set_wake_callback(self._on_remote_wake)
             await self._dashboard.serve()
         except Exception as e:
             self.ui.write_log(f"ERR: Mobile Connect server failed: {e}")
@@ -4923,7 +4911,7 @@ class LisaLive:
                 )
                 return
             
-            if not self.ui.muted or getattr(self.ui, "_wakeword_listening", False):
+            if not self.ui.muted or getattr(self.ui, "wakeword_listening", False):
                 lvl = float(np.sqrt(np.mean(np.square(indata, dtype=np.float32))))
                 # Speech gate: keep it just above the noise floor so quiet
                 # speech onset is streamed instead of being zeroed out.
@@ -5030,6 +5018,7 @@ class LisaLive:
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = sc.input_transcription.text.strip()
                             if txt:
+                                self._reset_idle_activity()
                                 try:
                                     from actions.attention_monitor import stop_native_speech
                                     stop_native_speech()
@@ -5037,6 +5026,7 @@ class LisaLive:
                                     pass
                                 in_buf.append(txt)
                                 if self.ui.muted and _wakeword_detected(txt):
+                                    self._reset_idle_activity()
                                     try:
                                         self.ui.set_muted_state(False, wakeword=True)
                                         self.ui.write_log("SYS: Wake word detected. Mic active.")
@@ -5045,6 +5035,7 @@ class LisaLive:
 
                         if sc.turn_complete:
                             self.set_speaking(False)
+                            self._reset_idle_activity()
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:

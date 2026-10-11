@@ -14828,6 +14828,16 @@ class LisaUI:
         if v != self._win._muted:
             self._win._toggle_mute()
 
+    @property
+    def wakeword_listening(self) -> bool:
+        """Standby mode: mic still streams for wake-word detection."""
+        return bool(getattr(self._win, "_wakeword_listening", False))
+
+    @property
+    def state(self) -> str:
+        """Current UI state string (e.g. 'listening', 'executing')."""
+        return str(getattr(self._win, "_state", "") or "")
+
     def set_muted(self, muted: bool):
         if bool(muted) != self._win._muted:
             self._win.set_muted_state(bool(muted))
