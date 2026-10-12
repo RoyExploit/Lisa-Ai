@@ -8689,16 +8689,16 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_floating_gesture_card') and self.centralWidget():
             cw = self.centralWidget()
             rw = self._right_panel.width() if hasattr(self, '_right_panel') and self._right_panel.isVisible() and not getattr(self, '_right_collapsed', False) else 0
-            # Park the gesture card at the BOTTOM-center of the free stage (below
-            # the centered orb, left of the chat sidebar) so it never lands on the
-            # top taskbar or the chat header buttons ("+ New", toggle). Clamp so it
-            # stays fully on-screen at any window size / monitor.
+            # Park the gesture card in the BOTTOM-LEFT of the free stage. The
+            # command bar lives at bottom-CENTER and the chat header at the top,
+            # so the bottom-left corner is the one spot that never collides with
+            # them. Clamp so it stays fully on-screen at any window size / monitor.
             gw = self._floating_gesture_card.width()
             gh = self._floating_gesture_card.height()
-            stage_w = max(1, cw.width() - rw)
-            gx = int((stage_w - gw) / 2)
-            gx = max(12, min(gx, max(12, cw.width() - rw - gw - 12)))
-            gy = max(12, cw.height() - gh - 18)
+            gx = 16
+            gy = max(16, cw.height() - gh - 18)
+            gx = max(8, min(gx, max(8, cw.width() - rw - gw - 8)))
+            gy = max(8, min(gy, max(8, cw.height() - gh - 8)))
             self._floating_gesture_card.move(gx, gy)
             self._floating_gesture_card.raise_()
         if getattr(self, '_briefing_overlay', None) and self._briefing_overlay.isVisible():
@@ -9812,7 +9812,7 @@ class MainWindow(QMainWindow):
         w.setFixedWidth(_RIGHT_W)
         w.setStyleSheet(
             f"QWidget#ModularRightSidebar {{ "
-            f"  background: rgba(8, 10, 15, 0.22); "
+            f"  background: rgba(8, 10, 15, 0.88); "
             f"  border-left: 1px solid rgba(0, 229, 255, 0.25); "
             f"}}"
         )
