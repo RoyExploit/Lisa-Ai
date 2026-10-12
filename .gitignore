@@ -46,6 +46,13 @@ config/identity.json
 config/.desktop_shortcut_created
 ig_debug.log
 
+# --- Browser automation profiles (personal, local only - NEVER commit) ---
+config/ig_browser_profile/
+config/*browser_profile*/
+config/browser_profile/
+**/browser_profile/
+**/ig_browser_profile/
+
 # --- Android project (excluded from GitHub) ---
 lisa-connect-android/
 
