@@ -1410,7 +1410,7 @@ def _quote_cmd_arg(path: str) -> str:
 
 
 def _hidden_launch_args(*extra_args: str) -> list[str]:
-    pythonw = Path(r"C:\Users\ravit\AppData\Local\Programs\Python\Python313\pythonw.exe")
+    pythonw = python.with_name("pythonw.exe")
     python = Path(sys.executable)
     main_py = BASE_DIR / "main.py"
     if getattr(sys, "frozen", False):
@@ -1426,7 +1426,7 @@ def _startup_run_value() -> str:
         return f'{_quote_cmd_arg(str(exe))} --startup'
     main_py = BASE_DIR / "main.py"
     venv_pythonw = BASE_DIR / ".venv" / "Scripts" / "pythonw.exe"
-    pythonw = Path(r"C:\Users\ravit\AppData\Local\Programs\Python\Python313\pythonw.exe")
+    pythonw = python.with_name("pythonw.exe")
     if venv_pythonw.exists():
         return f'{_quote_cmd_arg(str(venv_pythonw))} {_quote_cmd_arg(str(main_py))} --startup'
     if pythonw.exists():
