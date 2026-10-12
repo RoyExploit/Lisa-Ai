@@ -8626,7 +8626,7 @@ class MainWindow(QMainWindow):
             bg.set_stage_insets(0, rw)
             # Dim the orb on content pages so overlaid text/controls read clearly.
             page = getattr(self, "_current_page", "dashboard")
-            dim = 1.0 if page == "dashboard" else 0.35
+            dim = 1.0 if page == "dashboard" else 0.12
             bg.set_stage_dim(dim)
         except Exception:
             pass
@@ -14460,6 +14460,31 @@ class LisaUI:
         elif action == "toggle_startup":
             current = bool(self._load_app_settings().get("show_workspace_on_startup", False))
             self._toggle_workspace_on_startup(not current)
+        elif action == "toggle_wake_word":
+            # Wake on voice / assistant-name even while sleeping or muted.
+            # The wake engine re-reads this setting every cycle, so the change
+            # takes effect immediately without a restart.
+            try:
+                from memory import config_manager
+
+                new_state = not bool(config_manager.get_wake_word_enabled())
+                config_manager.save_wake_word_enabled(new_state)
+                self._win._set_status(
+                    "SYS: Wake-on-name " + ("enabled." if new_state else "disabled.")
+                )
+            except Exception:
+                pass
+        elif action == "toggle_autostart":
+            # Launch Lisa automatically when Windows starts.
+            try:
+                from core import autostart
+
+                new_state = autostart.toggle()
+                self._win._set_status(
+                    "SYS: Start with Windows " + ("enabled." if new_state else "disabled.")
+                )
+            except Exception:
+                pass
 
     def _submit_command(self, text: str):
         self._win.submit_command(text)

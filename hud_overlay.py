@@ -274,6 +274,36 @@ class HudOverlay(QWidget):
 
         menu.addSeparator()
 
+        # Wake on voice / assistant-name (listen even while sleeping/muted).
+        wake_act = QAction("Wake on Voice / Name", self)
+        wake_act.setCheckable(True)
+        try:
+            from memory import config_manager
+
+            wake_act.setChecked(bool(config_manager.get_wake_word_enabled()))
+        except Exception:
+            wake_act.setChecked(True)
+        wake_act.triggered.connect(
+            lambda checked: self.action_requested.emit("toggle_wake_word")
+        )
+        menu.addAction(wake_act)
+
+        # Launch Lisa automatically when Windows starts.
+        autostart_act = QAction("Start with Windows", self)
+        autostart_act.setCheckable(True)
+        try:
+            from core import autostart
+
+            autostart_act.setChecked(bool(autostart.is_enabled()))
+        except Exception:
+            autostart_act.setChecked(False)
+        autostart_act.triggered.connect(
+            lambda checked: self.action_requested.emit("toggle_autostart")
+        )
+        menu.addAction(autostart_act)
+
+        menu.addSeparator()
+
         hide_act = QAction("Hide HUD Orb", self)
         hide_act.triggered.connect(lambda: self.action_requested.emit("hide_hud"))
         menu.addAction(hide_act)
