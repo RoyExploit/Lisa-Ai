@@ -102,6 +102,41 @@ def _build_model(assistant_name: str):
     return _OWWModel(wakeword_models=[_FALLBACK_MODEL], inference_framework="onnx")
 
 
+_state = {"model": None, "name": None}
+_reload_requested = False
+
+
+def custom_models_dir() -> Path:
+    """Folder where the user drops/loads custom ``.onnx`` wake-word models.
+
+    The desktop "Load wake-word model" dialog copies a chosen file here, and
+    the engine picks it up without a restart.
+    """
+    return _CUSTOM_DIR
+
+
+def request_reload(assistant_name: Optional[str] = None) -> None:
+    """Ask the running engine to rebuild its model from assets/wakeword.
+
+    Called after the user loads a new .onnx (or renames the assistant) so the
+    acoustic trigger matches the new name immediately, with no app restart.
+    """
+    global _reload_requested
+    if assistant_name:
+        _state["name"] = assistant_name
+    _reload_requested = True
+
+
+def _rebuild_model() -> None:
+    """Rebuild the model in-place from the current assistant name."""
+    try:
+        model = _build_model(_state.get("name") or "Lisa")
+        _state["model"] = model
+        print("[WakeWord] Model rebuilt for live wake-word update.")
+    except Exception as exc:
+        print(f"[WakeWord] Reload failed: {exc}")
+
+
 def _engine_loop(assistant_name: str, on_trigger: Callable[[], None]) -> None:
     global _status
     try:
@@ -117,6 +152,8 @@ def _engine_loop(assistant_name: str, on_trigger: Callable[[], None]) -> None:
         print(f"[WakeWord] Model load failed: {exc}")
         return
 
+    _state["model"] = model
+    _state["name"] = assistant_name
     _status = "active"
     print(f"[WakeWord] Local ONNX engine active ({getattr(model, 'model_names', 'custom')}).")
 
@@ -127,7 +164,7 @@ def _engine_loop(assistant_name: str, on_trigger: Callable[[], None]) -> None:
         nonlocal run_count, last_fire
         try:
             mono = indata[:, 0] if indata.ndim > 1 else indata
-            scores = model.predict(mono)
+            scores = _state["model"].predict(mono)
             best = 0.0
             if isinstance(scores, dict):
                 best = max((float(v) for v in scores.values()), default=0.0)
