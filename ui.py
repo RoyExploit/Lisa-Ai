@@ -8197,6 +8197,9 @@ class MainWindow(QMainWindow):
         # The gesture card was created before these panels, so it would be
         # stacked underneath them. Lift it above them so Gestures is clickable.
         self._floating_gesture_card.raise_()
+        # Glue the card just before the Dashboard button once the first layout
+        # pass has run (deferred so all widget geometries are final).
+        QTimer.singleShot(0, self._position_gesture_card)
 
         self._btn_dashboard.clicked.connect(self._on_nav_dashboard)
         self._btn_chat.clicked.connect(self._toggle_right_sidebar)
@@ -8680,27 +8683,43 @@ class MainWindow(QMainWindow):
             if service is not None:
                 self._devices_page.refresh(force=True)
 
+    def _position_gesture_card(self):
+        """Keep the gesture card glued immediately AFTER the Settings taskbar
+        button (top bar), vertically centered with the nav buttons.
+
+        The anchor is the Settings button's live geometry, so the card follows
+        the taskbar layout automatically: it never drifts when the window is
+        resized, dragged to another monitor, or when sidebars toggle.
+        """
+        card = getattr(self, "_floating_gesture_card", None)
+        cw = self.centralWidget()
+        btn = getattr(self, "_btn_settings", None)
+        if card is None or cw is None or btn is None or not card.isVisible():
+            return
+        try:
+            gap = 12
+            ref = btn.mapTo(cw, QPoint(0, 0))
+            off = card.btn.mapTo(card, QPoint(0, 0))  # button offset inside the card
+            # Desired: card's inner button LEFT edge = 12px after Settings,
+            # vertically centered on the nav buttons.
+            gx = ref.x() + btn.width() + gap - off.x()
+            gy = ref.y() + (btn.height() - card.btn.height()) // 2 - off.y()
+            # Clamp so the button always stays fully inside the window.
+            max_x = cw.width() - card.btn.width() - off.x() - 8
+            gx = max(8, min(gx, max(8, max_x)))
+            gy = max(4, gy)
+            card.move(gx, gy)
+            card.raise_()
+        except Exception:
+            pass
+
     def resizeEvent(self, event):
         if event:
             super().resizeEvent(event)
         if self._overlay and self._overlay.isVisible() and self.centralWidget():
             cw = self.centralWidget()
             self._overlay.setGeometry(0, 0, cw.width(), cw.height())
-        if hasattr(self, '_floating_gesture_card') and self.centralWidget():
-            cw = self.centralWidget()
-            rw = self._right_panel.width() if hasattr(self, '_right_panel') and self._right_panel.isVisible() and not getattr(self, '_right_collapsed', False) else 0
-            # Park the gesture card in the BOTTOM-LEFT of the free stage. The
-            # command bar lives at bottom-CENTER and the chat header at the top,
-            # so the bottom-left corner is the one spot that never collides with
-            # them. Clamp so it stays fully on-screen at any window size / monitor.
-            gw = self._floating_gesture_card.width()
-            gh = self._floating_gesture_card.height()
-            gx = 16
-            gy = max(16, cw.height() - gh - 18)
-            gx = max(8, min(gx, max(8, cw.width() - rw - gw - 8)))
-            gy = max(8, min(gy, max(8, cw.height() - gh - 8)))
-            self._floating_gesture_card.move(gx, gy)
-            self._floating_gesture_card.raise_()
+        self._position_gesture_card()
         if getattr(self, '_briefing_overlay', None) and self._briefing_overlay.isVisible():
             self._position_briefing_overlay()
         if getattr(self, '_remote_overlay', None) and self._remote_overlay.isVisible():
@@ -9703,6 +9722,7 @@ class MainWindow(QMainWindow):
                 self._overlay = None
             if hasattr(self, '_floating_gesture_card'):
                 self._floating_gesture_card.show()
+            self._position_gesture_card()
             self.showNormal()
             self._apply_state("LISTENING")
             self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. Lisa AI online.")
