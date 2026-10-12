@@ -274,19 +274,6 @@ class HudOverlay(QWidget):
 
         menu.addSeparator()
 
-        # Wake on voice / assistant-name (listen even while sleeping/muted).
-        wake_act = QAction("Wake on Voice / Name", self)
-        wake_act.setCheckable(True)
-        try:
-            from memory import config_manager
-
-            wake_act.setChecked(bool(config_manager.get_wake_word_enabled()))
-        except Exception:
-            wake_act.setChecked(True)
-        wake_act.triggered.connect(
-            lambda checked: self.action_requested.emit("toggle_wake_word")
-        )
-        menu.addAction(wake_act)
 
         # Launch Lisa automatically when Windows starts.
         autostart_act = QAction("Start with Windows", self)

@@ -9306,29 +9306,39 @@ class MainWindow(QMainWindow):
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == QEvent.Type.WindowStateChange:
-            try:
-                if self.isMinimized():
-                    self.minimized.emit()
-                else:
-                    self.restored.emit()
-            except Exception:
-                pass
+            self._schedule_hud_sync()
 
     def hideEvent(self, event):
         # Window hidden without a state change (close-to-tray / hide_main /
         # Win+D edge behavior): still background the session into the HUD.
         super().hideEvent(event)
-        try:
-            self.minimized.emit()
-        except Exception:
-            pass
+        self._schedule_hud_sync()
 
     def showEvent(self, event):
         # Window re-shown without a state change (tray restore / show_main):
         # take the HUD overlay back down so exactly one orb is visible.
         super().showEvent(event)
+        self._schedule_hud_sync()
+
+    def _schedule_hud_sync(self):
+        # Windows can fire a burst of transient show/hide/state events during the
+        # minimize & restore animations (and a stray showEvent right after the
+        # minimize). Evaluating them immediately makes the HUD flap or never
+        # appear. Debounce and re-check the *settled* window state a moment later
+        # so the HUD reliably shows on minimize/close-to-tray and hides on restore.
         try:
-            self.restored.emit()
+            QTimer.singleShot(120, self._sync_hud_visibility)
+        except Exception:
+            pass
+
+    def _sync_hud_visibility(self):
+        # The HUD orb is shown only when the main window is minimized or hidden
+        # (backgrounded); the in-app orb stage takes over once the window is back.
+        try:
+            if self.isMinimized() or self.isHidden():
+                self.minimized.emit()
+            else:
+                self.restored.emit()
         except Exception:
             pass
 
@@ -14485,6 +14495,51 @@ class LisaUI:
                 )
             except Exception:
                 pass
+        elif action == "browse_wake_model":
+            # Load a custom openWakeWord .onnx model. The engine matches the
+            # model filename to the assistant's name, so name the file after
+            # your assistant (e.g. jarvis.onnx for an assistant named "Jarvis").
+            self._browse_wake_model()
+
+    def _browse_wake_model(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        import shutil
+        from pathlib import Path
+        from core import wake_word
+
+        dest_dir = wake_word.custom_models_dir()
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getOpenFileName(
+            self._win,
+            "Select a wake-word ONNX model",
+            str(dest_dir),
+            "openWakeWord model (*.onnx);;All files (*)",
+        )
+        if not path:
+            return
+        src = Path(path)
+        if src.suffix.lower() != ".onnx":
+            QMessageBox.warning(
+                self._win, "Invalid file", "Please choose a valid .onnx wake-word model."
+            )
+            return
+        try:
+            shutil.copy2(src, dest_dir / src.name)
+        except Exception as exc:
+            QMessageBox.critical(self._win, "Copy failed", f"Could not add model:\n{exc}")
+            return
+        # Ask the engine to rebuild with the new model on its next cycle.
+        try:
+            wake_word.request_reload()
+        except Exception:
+            pass
+        QMessageBox.information(
+            self._win,
+            "Wake-word model added",
+            f"Added '{src.name}'.\n\nName the file after your assistant "
+            f"(e.g. jarvis.onnx) so it activates on that name. "
+            f"The engine reloads within a few seconds.",
+        )
 
     def _submit_command(self, text: str):
         self._win.submit_command(text)

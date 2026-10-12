@@ -94,6 +94,9 @@ class OrbStage(QWidget):
         # 1.0 = full glow (dashboard); <1.0 fades the orb so content pages
         # (settings/home/devices) stay readable on top of it.
         self._dim = 1.0
+        # Physical shrink factor applied to r0 (1.0 = full size). set_stage_dim
+        # pulls this below 1.0 on content pages so the orb never covers controls.
+        self._scale = 1.0
 
         self._state_sig.connect(self._do_set_ai_state)
         self._audio_sig.connect(self._do_set_audio_level)
@@ -117,9 +120,14 @@ class OrbStage(QWidget):
         self._inset_right = max(0, int(right))
 
     def set_dim(self, factor: float) -> None:
-        """1.0 = full glow; <1.0 fades the orb so overlaying content stays
-        readable. Clamped to [0.0, 1.0]."""
+        """1.0 = full glow; <1.0 fades *and* shrinks the orb so overlaying
+        content (Settings/Home/etc.) is never covered at any window size."""
         self._dim = max(0.0, min(1.0, float(factor)))
+        if self._dim >= 0.99:
+            self._scale = 1.0
+        else:
+            # Content page: pull the orb in so it stays clear of text/controls.
+            self._scale = max(0.30, min(0.45, self._dim * 3.0))
 
     def set_audio_level(self, level: float) -> None:
         try:
@@ -171,7 +179,13 @@ class OrbStage(QWidget):
         vis_r = max(vis_l + 1, w - self._inset_right)
         vis_w = max(1, vis_r - vis_l)
         cx, cy = (vis_l + vis_r) / 2.0, h / 2.0
-        r0 = min(vis_w, h) * 0.30
+        r0 = min(vis_w, h) * 0.30 * self._scale
+        # Hard caps so the orb always fits inside its own radius: it never
+        # balloons on a large monitor and never grows wider than the free stage,
+        # so it can't creep under the chat sidebar or the settings/home panels.
+        r0 = min(r0, 200.0)
+        r0 = min(r0, vis_w * 0.42)
+        r0 = max(r0, 40.0)
         dim = self._dim
 
         col = STATE_COLORS[self._state]
@@ -179,6 +193,9 @@ class OrbStage(QWidget):
 
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Confine the orb and its glow strictly to the visible free stage so it
+        # never washes over the chat sidebar or the overlaid content pages.
+        p.setClipRect(vis_l, 0, vis_w, h)
 
         grad = QRadialGradient(QPointF(cx, cy), r0 * 1.6)
         alpha = int(255 * (0.06 + self._amp * 0.22) * dim)
