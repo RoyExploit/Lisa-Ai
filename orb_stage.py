@@ -179,13 +179,18 @@ class OrbStage(QWidget):
         vis_r = max(vis_l + 1, w - self._inset_right)
         vis_w = max(1, vis_r - vis_l)
         cx, cy = (vis_l + vis_r) / 2.0, h / 2.0
-        r0 = min(vis_w, h) * 0.30 * self._scale
-        # Hard caps so the orb always fits inside its own radius: it never
-        # balloons on a large monitor and never grows wider than the free stage,
-        # so it can't creep under the chat sidebar or the settings/home panels.
-        r0 = min(r0, 200.0)
-        r0 = min(r0, vis_w * 0.42)
-        r0 = max(r0, 40.0)
+        # Base radius scales with the smaller visible dimension so the orb
+        # auto-sizes to any window/monitor, then hard caps keep it comfortably
+        # inside the free stage so it never creeps under the chat sidebar or the
+        # settings/home panels -- at any window size or screen.
+        r0 = min(vis_w, h) * 0.24 * self._scale
+        r0 = min(r0, 170.0)
+        r0 = min(r0, vis_w * 0.36, h * 0.34)
+        r0 = max(r0, 34.0)
+        # Every particle (including the talking/listening "bubble" burst) is
+        # clamped to this outer bound, so bubbles stay small and never overlap
+        # neighbouring UI even at full amplitude.
+        r_max = r0 * 1.28
         dim = self._dim
 
         col = STATE_COLORS[self._state]
@@ -197,8 +202,8 @@ class OrbStage(QWidget):
         # never washes over the chat sidebar or the overlaid content pages.
         p.setClipRect(vis_l, 0, vis_w, h)
 
-        grad = QRadialGradient(QPointF(cx, cy), r0 * 1.6)
-        alpha = int(255 * (0.06 + self._amp * 0.22) * dim)
+        grad = QRadialGradient(QPointF(cx, cy), r0 * 1.25)
+        alpha = int(255 * (0.05 + self._amp * 0.18) * dim)
         grad.setColorAt(0.0, QColor(base[0], base[1], base[2], alpha))
         grad.setColorAt(1.0, QColor(base[0], base[1], base[2], 0))
         p.setPen(Qt.PenStyle.NoPen)
@@ -214,7 +219,11 @@ class OrbStage(QWidget):
         pts = []
         for i in range(self._count):
             x, y, z = self._dirs[i]
-            rad = r0 * self._jit[i] * (1.0 + self._amp * 0.55 * math.sin(t * self._speed[i] + self._phase[i]))
+            # Tame the burst: bubbles grow only slightly with amplitude so they
+            # stay small and never spill outside the orb's own radius.
+            rad = r0 * self._jit[i] * (1.0 + self._amp * 0.22 * math.sin(t * self._speed[i] + self._phase[i]))
+            if rad > r_max:
+                rad = r_max
             xr = x * ca - z * sa
             zr = x * sa + z * ca
             yr = y * ct - zr * st
@@ -225,9 +234,9 @@ class OrbStage(QWidget):
 
         for z2rad, sx, sy, rad, sc, i in pts:
             depth = (z2rad + rad) / (2.0 * rad + 1e-6)
-            e = min(1.0, self._amp * 1.6 * self._jit[i])
+            e = min(1.0, self._amp * 1.2 * self._jit[i])
             c = _lerp(base, hot, e * (0.4 + 0.6 * depth))
-            rp = 0.9 + 1.1 * sc
+            rp = 0.8 + 0.9 * sc
             p.setBrush(QColor(c[0], c[1], c[2], int(255 * dim)))
             p.drawEllipse(QPointF(sx, sy), rp, rp)
 

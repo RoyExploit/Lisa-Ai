@@ -8689,7 +8689,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, '_floating_gesture_card') and self.centralWidget():
             cw = self.centralWidget()
             rw = self._right_panel.width() if hasattr(self, '_right_panel') and self._right_panel.isVisible() and not getattr(self, '_right_collapsed', False) else 0
-            self._floating_gesture_card.move(cw.width() - rw - self._floating_gesture_card.width() - 20, 20)
+            # Park the gesture card at the BOTTOM-center of the free stage (below
+            # the centered orb, left of the chat sidebar) so it never lands on the
+            # top taskbar or the chat header buttons ("+ New", toggle). Clamp so it
+            # stays fully on-screen at any window size / monitor.
+            gw = self._floating_gesture_card.width()
+            gh = self._floating_gesture_card.height()
+            stage_w = max(1, cw.width() - rw)
+            gx = int((stage_w - gw) / 2)
+            gx = max(12, min(gx, max(12, cw.width() - rw - gw - 12)))
+            gy = max(12, cw.height() - gh - 18)
+            self._floating_gesture_card.move(gx, gy)
             self._floating_gesture_card.raise_()
         if getattr(self, '_briefing_overlay', None) and self._briefing_overlay.isVisible():
             self._position_briefing_overlay()
