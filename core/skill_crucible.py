@@ -83,6 +83,105 @@ IMPORT_TO_PIP = {
 }
 
 
+def _is_frozen() -> bool:
+    """True when running as a PyInstaller-frozen EXE."""
+    return getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+
+
+def _run_in_process_skill_test(
+    skill_code: str, test_cases: List[Dict[str, Any]], timeout: float
+) -> Tuple[bool, str, Dict[str, Any]]:
+    """Executes sandbox test cases inside the current process (frozen-EXE path).
+
+    Spawning ``sys.executable`` is impossible when frozen because
+    ``sys.executable`` is LisaAI.exe itself (no ``-c`` support). Instead the
+    skill code is exec'd in an isolated namespace on a daemon thread with a
+    join-timeout, mirroring the subprocess harness semantics.
+    """
+    import threading
+
+    start_time = time.time()
+    box: Dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            import asyncio as _asyncio
+            import inspect as _inspect
+            import json as _json
+
+            namespace: Dict[str, Any] = {}
+            exec(compile(skill_code, "<forged_skill>", "exec"), namespace)
+            execute = namespace.get("execute")
+            if not callable(execute):
+                box["error"] = "Skill code must define an 'execute(**kwargs)' function."
+                return
+            cases = test_cases or [{"input": {}}]
+            out = []
+            for i, tc in enumerate(cases):
+                args = (tc or {}).get("input", {}) or {}
+                try:
+                    if _inspect.iscoroutinefunction(execute):
+                        res = _asyncio.run(execute(**args))
+                    else:
+                        res = execute(**args)
+                    if res is None:
+                        res = "Operation completed with no output."
+                    is_err, err_msg = False, ""
+                    if isinstance(res, dict):
+                        if res.get("error"):
+                            is_err, err_msg = True, str(res["error"])
+                        elif res.get("success") is False:
+                            is_err, err_msg = True, str(res.get("message") or res.get("error") or "Skill returned success=False")
+                    elif isinstance(res, str) and (res.lower().startswith("error:") or res.lower().startswith("failed:")):
+                        is_err, err_msg = True, res
+                    if is_err:
+                        out.append({"index": i, "success": False, "error": err_msg, "output": str(res)[:300]})
+                    else:
+                        out.append({"index": i, "success": True, "output": str(res)[:300]})
+                except Exception as exc:
+                    import traceback as _tb
+                    out.append({"index": i, "success": False, "error": str(exc), "traceback": _tb.format_exc()})
+            box["results"] = out
+        except Exception as exc:
+            import traceback as _tb
+            box["error"] = f"{exc}\n{_tb.format_exc()}"
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    elapsed = time.time() - start_time
+    if thread.is_alive():
+        return False, f"Sandbox execution timed out after {timeout} seconds.", {"elapsed_s": timeout}
+    if "error" in box:
+        return False, f"Sandbox Test Failed: {str(box['error'])[:300]}", {"elapsed_s": elapsed}
+    results = box.get("results", [])
+    if not results:
+        results = [{"success": True, "output": "No test output."}]
+    all_passed = all(t.get("success", False) for t in results)
+    if not all_passed:
+        first_err = next((t.get("error", "Unknown test failure") for t in results if not t.get("success")), "Test failed")
+        return False, f"Test Verification Failed: {first_err}", {"results": results, "elapsed_s": elapsed}
+    return True, f"Passed {len(results)}/{len(results)} tests in {elapsed:.2f}s", {
+        "results": results, "elapsed_s": elapsed,
+    }
+
+
+def _check_import_healthy(dep: str) -> bool:
+    """Checks importability in-process when frozen (no subprocess available)."""
+    try:
+        if dep == "speedtest":
+            mod = __import__("speedtest")
+            return hasattr(mod, "Speedtest")
+        if dep == "PIL":
+            __import__("PIL.Image")
+            return True
+        if dep == "cv2":
+            mod = __import__("cv2")
+            return hasattr(mod, "imread")
+        __import__(dep)
+        return True
+    except Exception:
+        return False
 def _get_python_executable() -> str:
     """Finds the running python executable so dependencies match the active runtime."""
     exe = sys.executable
@@ -159,6 +258,21 @@ class SkillCrucible:
         if not dependencies:
             return True, "No external dependencies required."
 
+        if _is_frozen():
+            # Frozen EXE: sys.executable is LisaAI.exe, NOT python — spawning
+            # `[exe, "-c", ...]` or `[exe, "-m", "pip", ...]` would relaunch the
+            # whole app (or fail). Only in-process import checks are possible;
+            # a missing dep is a clear message instead of a recursive launch.
+            missing = [d for d in dependencies if not _check_import_healthy(d)]
+            if missing:
+                names = ", ".join(IMPORT_TO_PIP.get(d, d) for d in missing)
+                return False, (
+                    f"Missing dependencies in the installed app: {names}. "
+                    "Skills needing new packages must be forged from the "
+                    "source checkout (python main.py), then rebuild the installer."
+                )
+            return True, "All dependencies satisfied."
+
         py_exe = _get_python_executable()
         installed_any = []
 
@@ -213,6 +327,11 @@ class SkillCrucible:
         Executes test cases in an isolated child process to verify runtime correctness.
         Returns: (passed: bool, message: str, telemetry: dict)
         """
+        if _is_frozen():
+            # Frozen EXE cannot spawn `sys.executable -c ...` (that IS the app).
+            # Run the same checks in-process on a timeout-guarded thread.
+            return _run_in_process_skill_test(skill_code, test_cases, timeout)
+
         py_exe = _get_python_executable()
 
         # Build runner harness

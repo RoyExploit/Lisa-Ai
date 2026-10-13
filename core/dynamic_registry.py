@@ -31,6 +31,27 @@ FEATURES_DIR = PROJECT_ROOT / "features"
 APPDATA_SKILLS_DIR = get_user_data_dir() / "skills"
 
 
+def _is_frozen() -> bool:
+    """True when running as a PyInstaller-frozen EXE (sys._MEIPASS present)."""
+    return getattr(sys, "frozen", False) or hasattr(sys, "_MEIPASS")
+
+
+def _writable_skills_dir() -> Path:
+    """Directory new skills can actually be written to.
+
+    Source runs (python main.py): the codebase ``features/`` folder so the
+    self-evolving-codebase behaviour is preserved.
+    Frozen EXE runs: ``%LOCALAPPDATA%\\LisaAI\\skills`` because the bundled
+    ``features/`` lives inside the read-only ``_MEIPASS`` temp dir.
+    """
+    if _is_frozen():
+        d = APPDATA_SKILLS_DIR
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    FEATURES_DIR.mkdir(parents=True, exist_ok=True)
+    return FEATURES_DIR
+
+
 class DynamicSkill:
     """Represents a loaded, runnable feature or synthetic skill in Lisa AI."""
 
@@ -105,14 +126,20 @@ class DynamicToolRegistry:
 
     @classmethod
     def get_skills_directory(cls) -> Path:
-        FEATURES_DIR.mkdir(parents=True, exist_ok=True)
-        return FEATURES_DIR
+        # Frozen EXE: bundled features/ lives in read-only _MEIPASS -> use AppData.
+        # Source run: keep self-evolving codebase behaviour (features/ folder).
+        return _writable_skills_dir()
 
     @classmethod
     def initialize(cls) -> int:
         """Loads all valid features and skills from the codebase features/ directory and AppData vault."""
         cls._skills.clear()
-        FEATURES_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            FEATURES_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Frozen EXE: bundled features/ is read-only (_MEIPASS). Reads still
+            # work; writes go to the AppData vault via get_skills_directory().
+            pass
         count = 0
 
         # 1. Load native features from codebase features/ directory
@@ -172,10 +199,51 @@ class DynamicToolRegistry:
                     except Exception as e:
                         logger.warning(f"[Registry] Failed to load feature package '{item.name}': {e}")
 
-        # 2. Check legacy AppData skills vault for backward compatibility
-        if APPDATA_SKILLS_DIR.exists():
-            for item in APPDATA_SKILLS_DIR.iterdir():
-                if item.is_dir() and item.name not in cls._skills:
+        # 2. AppData skills vault (primary write target for frozen EXE;
+        # also checked for backward compatibility on source runs)
+        try:
+            vault_items = sorted(
+                APPDATA_SKILLS_DIR.iterdir(),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0,
+            ) if APPDATA_SKILLS_DIR.exists() else []
+        except OSError:
+            vault_items = []
+        for item in vault_items:
+            # Single-file skills (frozen EXE writes {name}.py + optional {name}/manifest)
+            if item.is_file() and item.suffix == ".py" and item.stem not in cls._skills:
+                try:
+                    source = item.read_text(encoding="utf-8")
+                    tree = ast.parse(source, filename=str(item))
+                    meta: Dict[str, Any] = {}
+                    for node in tree.body:
+                        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+                        if any(isinstance(target, ast.Name) and target.id == "FEATURE_METADATA" for target in targets):
+                            parsed = ast.literal_eval(node.value)
+                            if isinstance(parsed, dict):
+                                meta = parsed
+                            break
+                    pkg_manifest = item.with_suffix("") / "manifest.json"
+                    if pkg_manifest.exists():
+                        with open(pkg_manifest, "r", encoding="utf-8") as f:
+                            meta = {**meta, **json.load(f)}
+                    if not meta:
+                        meta = {
+                            "name": item.stem,
+                            "description": ast.get_docstring(tree) or f"Skill {item.stem}",
+                            "parameters": {"type": "OBJECT", "properties": {}},
+                        }
+                    feat_name = meta.get("name", item.stem)
+                    meta.setdefault("created_at", item.stat().st_mtime)
+                    skill = DynamicSkill(item, meta)
+                    cls._skills[feat_name] = skill
+                    for alias in meta.get("aliases", []):
+                        if alias not in cls._skills:
+                            cls._skills[alias] = skill
+                    count += 1
+                except Exception:
+                    pass
+                continue
+            if item.is_dir() and item.name not in cls._skills:
                     manifest_file = item / "manifest.json"
                     code_file = item / "skill.py"
                     if manifest_file.exists() and code_file.exists():
