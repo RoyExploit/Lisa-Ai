@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="assets/Lisa_evo_logo.png" alt="Lisa AI Logo" width="220" />
+<img src="assets/lisa_os.png" alt="Lisa AI Logo" width="220" />
 
 ### The Self-Evolving, Multimodal Personal AI Desktop Environment
 

@@ -90,6 +90,9 @@ def _write_uninstaller(target_dir):
             f'reg delete "HKCU\\{UNINSTALL_KEY}" /f >nul 2>&1\r\n'
             f'if exist "{desktop}" del /f /q "{desktop}"\r\n'
             f'if exist "{programs}" del /f /q "{programs}"\r\n'
+            # Legacy cleanup: old installs went to %LOCALAPPDATA%\Lisa_Evo
+            # (pre-rebrand default). Remove it so no stale Evo copy remains.
+            'if exist "%LOCALAPPDATA%\\Lisa_Evo" rmdir /s /q "%LOCALAPPDATA%\\Lisa_Evo"\r\n'
             "timeout /t 2 /nobreak >nul\r\n"
             f'rmdir /s /q "{target_dir}"\r\n'
             "echo Done.\r\n"
@@ -333,7 +336,7 @@ class InstallWizard(QWidget):
         p1_layout.addWidget(desc)
         
         # Default Path
-        self.install_path = os.path.join(os.environ.get('LOCALAPPDATA', os.environ['USERPROFILE']), 'Lisa_Evo')
+        self.install_path = os.path.join(os.environ.get('LOCALAPPDATA', os.environ['USERPROFILE']), 'LisaAI')
         path_label = QLabel(f"Destination Folder: {self.install_path}")
         path_label.setFont(QFont("Segoe UI", 10))
         path_label.setStyleSheet("color: #aaa;")

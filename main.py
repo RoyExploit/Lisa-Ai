@@ -120,7 +120,7 @@ def get_base_dir():
 BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = get_user_data_dir() / "config" / "api_keys.json"
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
-STARTUP_LOG     = Path(os.environ.get("LOCALAPPDATA", str(BASE_DIR))) / "Lisa AI" / "startup.log"
+STARTUP_LOG     = get_user_data_dir() / "startup.log"
 LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
