@@ -132,7 +132,7 @@ BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = get_user_data_dir() / "config" / "api_keys.json"
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
 STARTUP_LOG     = get_user_data_dir() / "startup.log"
-LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-latest"
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000
 RECEIVE_SAMPLE_RATE = 24000
@@ -327,11 +327,23 @@ def _gemini_text_reply(prompt: str) -> str:
         "You are Lisa AI, a concise, helpful desktop assistant. "
         "Reply naturally and briefly. Do not mention internal implementation details."
     )
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"{system_prompt}\n\nUser: {prompt}",
-        config={"temperature": 0.6},
-    )
+    response = None
+    last_err = None
+    for _model in ("gemini-flash-latest", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-2.5-pro"):
+        try:
+            response = client.models.generate_content(
+                model=_model,
+                contents=f"{system_prompt}\n\nUser: {prompt}",
+                config={"temperature": 0.6},
+            )
+            if getattr(response, "text", None):
+                break
+        except Exception as _e:
+            last_err = _e
+            print(f"[Lisa AI] [!] Gemini text model {_model} failed: {getattr(_e, 'code', _e)}")
+            continue
+    if response is None:
+        raise RuntimeError(f"All Gemini text models failed: {last_err}")
     return _extract_gemini_text(response)
 
 
@@ -4158,20 +4170,23 @@ class LisaLive:
             tools=[{"function_declarations": tool_declarations}],
             session_resumption=types.SessionResumptionConfig(handle=getattr(self, '_resume_handle', None)),
             # ── Voice-activity detection tuning ──────────────────────────────
-            # The default VAD is far too eager: it starts a turn on background
-            # noise (fans, keyboard, TV) and ends a turn almost instantly, so
-            # Lisa "hears" speech that was never said and answers herself. We
-            # require LOW start sensitivity (only clear, deliberate speech
-            # opens a turn) and a generous silence window before a turn ends,
-            # plus a small prefix so the first syllable of real speech is never
-            # clipped. This is the fix for phantom/self-generated turns.
+            # Balanced for BOTH reliable recognition and a snappy reply:
+            #  - START_SENSITIVITY_HIGH: catch the onset of your speech easily.
+            #    The previous LOW setting was too strict and missed real speech.
+            #    Background noise is already rejected by the local mic RMS gate
+            #    in _listen_audio, so Gemini can afford to be sensitive here.
+            #  - END_SENSITIVITY_LOW: stay patient through brief mid-sentence
+            #    pauses so Lisa doesn't cut you off.
+            #  - silence_duration_ms=600: end the turn ~300ms sooner than the old
+            #    900ms so the reply starts faster, without chopping natural speech.
+            #  - prefix_padding_ms=150: keep the first syllable from being clipped.
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
-                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
                     end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
-                    prefix_padding_ms=200,
-                    silence_duration_ms=900,
+                    prefix_padding_ms=150,
+                    silence_duration_ms=600,
                 )
             ),
             speech_config=types.SpeechConfig(
@@ -4944,6 +4959,14 @@ class LisaLive:
         loop = asyncio.get_event_loop()
         import numpy as np
 
+        # Re-assert the sounddevice/numpy DeprecationWarning suppression right
+        # before the mic stream opens. The long import chain can reset warning
+        # filters, so we make absolutely sure this (harmless, upstream numpy 2.5
+        # vs sounddevice) warning never floods the console during live audio.
+        import warnings as _w
+        _w.filterwarnings("ignore", message=r".*Setting the shape on a NumPy array.*")
+        _w.filterwarnings("ignore", category=DeprecationWarning, module=r"sounddevice")
+
         _mic_name = config_manager.get_input_device()
         _mic_dev = audio_devices.resolve(_mic_name, "input") if _mic_name else None
         available_inputs = audio_devices.list_devices("input")
@@ -5096,8 +5119,13 @@ class LisaLive:
                     if response.server_content:
                         sc = response.server_content
 
+                        # NOTE: do NOT set_speaking(True) from a text transcript
+                        # alone. The visible "speaking" state must track real
+                        # audio (response.data above). A transcript can arrive
+                        # with no audio packet, which left the bubble showing
+                        # "SPEAKING" while nothing played. Only actual audio
+                        # flips the bubble; turn_complete clears it.
                         if sc.output_transcription and sc.output_transcription.text:
-                            self.set_speaking(True)
                             txt = sc.output_transcription.text.strip()
                             if txt:
                                 out_buf.append(txt)
