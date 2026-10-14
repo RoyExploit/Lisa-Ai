@@ -15,11 +15,11 @@ $WorkingDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location -Path $WorkingDir
 
 Write-Host "==========================================================================" -ForegroundColor Yellow
-Write-Host "  ____  ____      _    _   _ __  __    _      _    ___ " -ForegroundColor Yellow
-Write-Host " | __ )|  _ \    / \  | | | |  \/  |  / \    / \  |_ _|" -ForegroundColor Yellow
-Write-Host " |  _ \| |_) |  / _ \ | |_| | |\/| | / _ \  / _ \  | | " -ForegroundColor Yellow
-Write-Host " | |_) |  _ <  / ___ \|  _  | |  | |/ ___ \/ ___ \ | | " -ForegroundColor Yellow
-Write-Host " |____/|_| \_\/_/   \_\_| |_|_|  |_/_/   \_\_/   \_\___|" -ForegroundColor Yellow
+Write-Host "  _     ___  ____    _      _    ___ " -ForegroundColor Yellow
+Write-Host " | |   |_ _/ ___|  / \    / \  |_ _|" -ForegroundColor Yellow
+Write-Host " | |    | |\___ \ / _ \  / _ \  | | " -ForegroundColor Yellow
+Write-Host " | |___ | | ___) / ___ \/ ___ \ | | " -ForegroundColor Yellow
+Write-Host " |_____|___|____/_/   \_\_/   \_\___|" -ForegroundColor Yellow
 Write-Host "                      Lisa AI" -ForegroundColor Cyan
 Write-Host "         AUTONOMOUS SELF-EVOLUTION COGNITIVE ENGINE" -ForegroundColor Green
 Write-Host "   [Skill Forge // Crucible Sandbox // 180 FPS HoloCore]" -ForegroundColor Cyan

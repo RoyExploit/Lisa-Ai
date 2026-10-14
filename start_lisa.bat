@@ -7,14 +7,16 @@ cd /d "%~dp0"
 color 0E
 
 echo ==========================================================================
-echo   ____  ____      _    _   _ __  __    _      _    ___ 
-echo  ^| __ )^|  _ \    / \  ^| ^| ^| ^|  \/  ^|  / \    / \  ^|_ _^|
-echo  ^|  _ \^| ^|_) ^|  / _ \ ^| ^|_^| ^| ^|\/^| ^| / _ \  / _ \  ^| ^| 
-echo  ^| ^|_) ^|  _ ^<  / ___ \^|  _  ^| ^|  ^| ^|/ ___ \/ ___ \ ^| ^| 
-echo  ^|____/^|_^| \_\/_/   \_\_^| ^|_^|_^|  ^|_/_/   \_\_/   \_\___^|
-echo                       Lisa AI
-echo          AUTONOMOUS SELF-EVOLUTION COGNITIVE ENGINE
-echo    [Skill Forge // Crucible Sandbox // 180 FPS HoloCore]
+echo   _     ___  ____    _      _    ___
+echo  ^| ^|   ^|_ _/ ___^|  / \    / \  ^|_ _^|
+echo  ^| ^|    ^| ^|\___ \ / _ \  / _ \  ^| ^|
+echo  ^| ^|___ ^| ^| ___) / ___ \/ ___ \ ^| ^|
+echo  ^|_____^|___^|____/_/   \_\_/   \_\___^|
+echo.
+echo                 LISA AI  -  Autonomous Desktop Intelligence
+echo              Self-Evolving Cognitive Engine - Voice Assistant
+echo         [Skill Forge  //  Crucible Sandbox  //  180 FPS HoloCore]
+echo.
 echo ==========================================================================
 echo.
 echo Launching automated bootstrap sequence...
