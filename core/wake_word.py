@@ -64,32 +64,51 @@ def _custom_models_for(assistant_name: str) -> list:
     return [p for _, p in ranked]
 
 
-def _ensure_bundled_models() -> None:
-    """Best-effort seeding of the bundled openWakeWord ONNX models.
+def _bundled_model_present() -> bool:
+    """True only if the bundled 'hey_jarvis' ONNX is already on disk.
 
-    The models live inside the openWakeWord package (`resources/models`) and
-    are included in the packaged EXE via PyInstaller's collect_data_files.
-    On a fresh source checkout without internet this may download on first
-    run; any failure is caught and the Model constructor falls through to
-    its own error handling so the app still starts.
+    Purely a presence check - this NEVER downloads anything. Used to decide
+    whether the generic fallback is usable without hitting the network.
     """
     try:
         import openwakeword
-        from pathlib import Path as _P
-        res = _P(openwakeword.__file__).resolve().parent / "resources" / "models"
-        if (res / "hey_jarvis_v0.1.onnx").is_file() and (res / "embedding_model.onnx").is_file() and (res / "melspectrogram.onnx").is_file():
-            return
+        res = Path(openwakeword.__file__).resolve().parent / "resources" / "models"
+        return (res / "hey_jarvis_v0.1.onnx").is_file()
+    except Exception:
+        return False
+
+
+def download_bundled_model() -> str:
+    """MANUAL, user-initiated download of the bundled 'hey_jarvis' wake model.
+
+    Nothing calls this automatically - it exists ONLY so the user can opt in
+    from the HUD ('Download default wake word') when they have no custom
+    .onnx and want the generic fallback. The app itself will never fetch this
+    on its own. Returns a short status message for the UI.
+    """
+    try:
         from openwakeword.utils import download_models
-        print("[WakeWord] Bundled ONNX models missing - attempting one-time download...")
+        print("[WakeWord] Manual download of bundled 'hey_jarvis' model requested...")
         download_models(model_names=["hey_jarvis_v0.1"])
+        # Reload the running engine so the freshly downloaded model is used.
+        request_reload()
+        return "Default wake-word model downloaded. The engine will reload in a few seconds."
     except Exception as exc:
-        print(f"[WakeWord] Model auto-download skipped/failed: {exc}")
+        print(f"[WakeWord] Manual download failed: {exc}")
+        return f"Download failed: {exc}"
 
 
 def _build_model(assistant_name: str):
-    """Construct an openWakeWord model (custom ONNX preferred)."""
+    """Construct an openWakeWord model (custom ONNX preferred).
+
+    Resolution order (never auto-downloads anything):
+      1. A user-supplied model in assets/wakeword/*.onnx (matched to the
+         assistant's name). This is the intended path.
+      2. The bundled 'hey_jarvis' fallback, but ONLY if it is already on disk.
+         If it is not present, the engine disables itself with a clear message
+         telling the user how to get a model - it does NOT fetch one silently.
+    """
     from openwakeword import Model as _OWWModel
-    _ensure_bundled_models()
 
     custom = _custom_models_for(assistant_name)
     if custom:
@@ -98,6 +117,15 @@ def _build_model(assistant_name: str):
         print(f"[WakeWord] Loading custom ONNX model: {chosen.name}")
         return _OWWModel(wakeword_models=[str(chosen)], inference_framework="onnx")
 
+    # No custom model. Use the bundled fallback only if it already exists; we
+    # never download it automatically. With nothing available, raise so the
+    # engine loop reports a helpful 'disabled' status instead of going online.
+    if not _bundled_model_present():
+        raise RuntimeError(
+            "No wake-word model available. Add a custom .onnx via the HUD "
+            "('Load custom wake-word model'), or click 'Download default wake "
+            "word' to fetch the bundled model on demand."
+        )
     print(f"[WakeWord] No custom model in assets/wakeword - using bundled '{_FALLBACK_MODEL}'.")
     return _OWWModel(wakeword_models=[_FALLBACK_MODEL], inference_framework="onnx")
 

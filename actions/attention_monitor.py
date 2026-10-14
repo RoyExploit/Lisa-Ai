@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import platform
@@ -627,7 +628,7 @@ class AttentionMonitor:
 
     def _current_max_id(self) -> int:
         try:
-            with sqlite3.connect(self._db) as con:
+            with contextlib.closing(sqlite3.connect(self._db)) as con:
                 cur = con.cursor()
                 cur.execute("SELECT COALESCE(MAX(Id), 0) FROM Notification WHERE Type='toast'")
                 row = cur.fetchone()
@@ -646,7 +647,7 @@ class AttentionMonitor:
         self._poll_windows(now)
 
     def _poll_toasts(self, now: float) -> None:
-        with sqlite3.connect(self._db, timeout=1.5) as con:
+        with contextlib.closing(sqlite3.connect(self._db, timeout=1.5)) as con:
             con.row_factory = sqlite3.Row
             cur = con.cursor()
             cur.execute(

@@ -14530,6 +14530,11 @@ class LisaUI:
             # model filename to the assistant's name, so name the file after
             # your assistant (e.g. jarvis.onnx for an assistant named "Jarvis").
             self._browse_wake_model()
+        elif action == "download_wake_model":
+            # MANUAL, user-initiated download of the bundled 'hey_jarvis' wake
+            # model. The app never does this on its own - it only happens when
+            # the user explicitly picks this menu item.
+            self._download_wake_model()
 
     def _browse_wake_model(self):
         from PyQt6.QtWidgets import QFileDialog, QMessageBox
@@ -14570,6 +14575,43 @@ class LisaUI:
             f"(e.g. jarvis.onnx) so it activates on that name. "
             f"The engine reloads within a few seconds.",
         )
+
+    def _download_wake_model(self):
+        """Manual, user-initiated download of the bundled 'hey_jarvis' model.
+
+        This is the ONLY path that fetches the default model, and it runs only
+        when the user explicitly chooses it. A short confirm explains what will
+        be downloaded (a ~2.5 MB public model, nothing personal) before we go.
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        from core import wake_word
+
+        confirm = QMessageBox.question(
+            self._win,
+            "Download default wake word?",
+            "This downloads the generic 'Hey Jarvis' wake-word model "
+            "(~2.5 MB) from the openWakeWord project so the assistant can wake "
+            "on voice without a custom model.\n\n"
+            "Nothing is downloaded automatically — this only runs because you "
+            "clicked it. Prefer your own model? Use 'Load custom wake-word "
+            "model…' instead.\n\nDownload now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            msg = wake_word.download_bundled_model()
+        except Exception as exc:
+            QMessageBox.critical(
+                self._win, "Download failed", f"Could not download the model:\n{exc}"
+            )
+            return
+        if msg.lower().startswith("download failed"):
+            QMessageBox.critical(self._win, "Download failed", msg)
+        else:
+            QMessageBox.information(self._win, "Wake-word model", msg)
 
     def _submit_command(self, text: str):
         self._win.submit_command(text)

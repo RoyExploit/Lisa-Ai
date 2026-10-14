@@ -59,6 +59,26 @@ class CredentialVault:
             return {}
 
 
+class _ManagedConnection(sqlite3.Connection):
+    """A sqlite3 connection that closes itself when a `with` block exits.
+
+    The stdlib `with sqlite3.connect(...)` only wraps the transaction (commit
+    on success / rollback on error) - it never closes the handle, leaking a
+    connection on every call. Overriding __exit__ to also close fixes the leak
+    while preserving the exact commit/rollback semantics the call sites rely on.
+    """
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if exc_type is None:
+                self.commit()
+            else:
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+
 class SmartHomeStorage:
     def __init__(self, db_path: Path | None = None):
         _ensure_dir()
@@ -68,7 +88,7 @@ class SmartHomeStorage:
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=10, check_same_thread=False)
+        conn = sqlite3.connect(self._db_path, timeout=10, check_same_thread=False, factory=_ManagedConnection)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")

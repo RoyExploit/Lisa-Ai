@@ -274,6 +274,21 @@ class HudOverlay(QWidget):
 
         menu.addSeparator()
 
+        # ── Wake-word model management (manual only - never auto-downloads) ──
+        load_wake = QAction("Load custom wake-word model…", self)
+        load_wake.triggered.connect(
+            lambda: self.action_requested.emit("browse_wake_model")
+        )
+        menu.addAction(load_wake)
+
+        download_wake = QAction("Download default wake word", self)
+        download_wake.triggered.connect(
+            lambda: self.action_requested.emit("download_wake_model")
+        )
+        menu.addAction(download_wake)
+
+        menu.addSeparator()
+
 
         # Launch Lisa automatically when Windows starts.
         autostart_act = QAction("Start with Windows", self)

@@ -1,5 +1,16 @@
 from core.user_paths import get_user_data_dir
 import os
+import warnings
+
+# ── Noise suppression ────────────────────────────────────────────────────
+# These are all known-harmless and otherwise flood the console every second:
+#  - sounddevice reshapes a NumPy array via `data.shape = ...`, deprecated in
+#    NumPy 2.5 (upstream library, not ours - nothing to fix on our side).
+#  - sqlite ResourceWarnings for connections closed by GC rather than `with`.
+# Silencing ONLY these keeps real warnings visible.
+warnings.filterwarnings("ignore", message=r".*Setting the shape on a NumPy array.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"sounddevice")
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 # Hardware acceleration & WebGL flags for smooth 180fps+ rendering in Chromium
 os.environ.setdefault(
@@ -450,9 +461,10 @@ def _looks_like_spreadsheet_request(text: str) -> bool:
 def _extract_skill_creation_goal(text: str) -> str | None:
     normalized = re.sub(r"\s+", " ", (text or "").strip())
     match = re.match(
-        r"^(?:please\s+)?(?:(?:i\s+(?:want|need|would like)\s+you\s+to|(?:can|could)\s+you)\s+)?"
-        r"(?:make|create|build|develop|generate|forge|write|implement|add|design)\s+"
-        r"(?:me\s+)?(?:your\s+)?(?:(?:a|an|new|custom|own)\s+)*(?:skill|feature)\b(.*)$",
+        r"^(?:please\s+|lisa[, ]\s*)?(?:(?:i\s+(?:want|need|would like)\s+you\s+to|(?:can|could)\s+you|i\s+want\s+you\s+to)\s+)?"
+        r"(?:make|create|build|develop|generate|forge|write|implement|add|design|teach|learn)\s+"
+        r"(?:me\s+)?(?:your\s+)?(?:(?:a|an|new|custom|own)\s+)*"
+        r"(?:skills?|features?|tools?|capabilit(?:y|ies)|plugins?|functions?)\b(.*)$",
         normalized,
         flags=re.IGNORECASE,
     )
@@ -460,7 +472,7 @@ def _extract_skill_creation_goal(text: str) -> str | None:
         return None
 
     goal = match.group(1).strip(" \t:,-")
-    goal = re.sub(r"^(?:that|which|to)\s+", "", goal, flags=re.IGNORECASE)
+    goal = re.sub(r"^(?:that|which|to|where|allowing|allows)\s+", "", goal, flags=re.IGNORECASE)
     goal = re.sub(
         r"^(?:(?:will|can|could|should)\s+)?(?:allow|let|enable|allows|lets|enables)\s+(?:you\s+)?(?:to\s+)?",
         "",
@@ -2271,6 +2283,17 @@ class LisaLive:
         # Check for email command initiation
         lower = text.lower()
         skill_goal = _extract_skill_creation_goal(text)
+        # Second detector: SkillDiscovery's richer regex set catches natural
+        # phrasings the primary matcher misses (e.g. "teach yourself to call
+        # people on WhatsApp", "make something that lets you talk over calls").
+        if not skill_goal:
+            try:
+                from core.skill_discovery import SkillDiscovery
+                parsed = SkillDiscovery.analyze_command(text)
+                if parsed and parsed.get("goal"):
+                    skill_goal = parsed["goal"]
+            except Exception:
+                skill_goal = None
         if skill_goal is not None:
             if not skill_goal:
                 prompt = "What should the new skill or feature do?"
@@ -3968,7 +3991,10 @@ class LisaLive:
             async def _send():
                 try:
                     prompt = f"System Alert / Context: {text}\n\nPlease relay this information to me naturally now."
-                    await self.session.send(input=prompt, end_of_turn=True)
+                    await self.session.send_client_content(
+                        turns={"parts": [{"text": prompt}]},
+                        turn_complete=True,
+                    )
                 except Exception as e:
                     print(f"[Lisa AI] Unified Speak (Aoede) err: {e}")
                     def _fallback():
@@ -4131,6 +4157,23 @@ class LisaLive:
             system_instruction="\n".join(parts),
             tools=[{"function_declarations": tool_declarations}],
             session_resumption=types.SessionResumptionConfig(handle=getattr(self, '_resume_handle', None)),
+            # ── Voice-activity detection tuning ──────────────────────────────
+            # The default VAD is far too eager: it starts a turn on background
+            # noise (fans, keyboard, TV) and ends a turn almost instantly, so
+            # Lisa "hears" speech that was never said and answers herself. We
+            # require LOW start sensitivity (only clear, deliberate speech
+            # opens a turn) and a generous silence window before a turn ends,
+            # plus a small prefix so the first syllable of real speech is never
+            # clipped. This is the fix for phantom/self-generated turns.
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    disabled=False,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+                    prefix_padding_ms=200,
+                    silence_duration_ms=900,
+                )
+            ),
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(

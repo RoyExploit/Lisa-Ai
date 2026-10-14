@@ -10,7 +10,6 @@ from core.dynamic_registry import DynamicToolRegistry
 
 def test_planner_prompt_has_Lisa_evo_rebrand_and_rules():
     assert "Lisa AI" in PLANNER_PROMPT
-    assert "Lisa AI" not in PLANNER_PROMPT
     assert "Echo HUD" not in PLANNER_PROMPT
     assert "AUTONOMOUS SELF-EVOLUTION" in PLANNER_PROMPT
 
