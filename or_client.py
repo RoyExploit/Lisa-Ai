@@ -108,6 +108,16 @@ class OpenRouterClient:
         if response_format:
             payload["response_format"] = response_format
 
+        # Refresh from disk on every call: the singleton is created at import
+        # time, which can precede api_keys.json (e.g. first run, when the setup
+        # overlay only writes the file moments later), and the user may rotate
+        # a key from Settings mid-session. A tiny file read beats caching a
+        # stale/empty key for the whole process lifetime.
+        fresh_key = _load_api_key()
+        if fresh_key and fresh_key != self.api_key:
+            self.api_key = fresh_key
+            self._headers["Authorization"] = f"Bearer {self.api_key}"
+
         if not self.api_key:
             raise PermissionError(
                 "[OpenRouter] API key is missing. Add a valid sk-or- key in config/api_keys.json."

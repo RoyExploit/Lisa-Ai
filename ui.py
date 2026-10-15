@@ -1410,8 +1410,8 @@ def _quote_cmd_arg(path: str) -> str:
 
 
 def _hidden_launch_args(*extra_args: str) -> list[str]:
-    pythonw = python.with_name("pythonw.exe")
     python = Path(sys.executable)
+    pythonw = python.with_name("pythonw.exe")
     main_py = BASE_DIR / "main.py"
     if getattr(sys, "frozen", False):
         exe = Path(sys.executable)
@@ -1426,6 +1426,7 @@ def _startup_run_value() -> str:
         return f'{_quote_cmd_arg(str(exe))} --startup'
     main_py = BASE_DIR / "main.py"
     venv_pythonw = BASE_DIR / ".venv" / "Scripts" / "pythonw.exe"
+    python = Path(sys.executable)
     pythonw = python.with_name("pythonw.exe")
     if venv_pythonw.exists():
         return f'{_quote_cmd_arg(str(venv_pythonw))} {_quote_cmd_arg(str(main_py))} --startup'
@@ -10801,7 +10802,7 @@ class SystemConnectivityPage(QWidget):
         # Engine Status Row
         status_row = QHBoxLayout()
         is_online = local_brain.is_available()
-        status_text = "● Local Engine Online (Ollama)" if is_online else "x Local Engine Offline"
+        status_text = f"● Local Engine Online ({local_brain.engine_label()})" if is_online else "x Local Engine Offline"
         self._local_status_lbl = QLabel(status_text)
         self._local_status_lbl.setStyleSheet("color: #00ffaa; font-weight: bold;" if is_online else "color: #ff5555; font-weight: bold;")
         status_row.addWidget(QLabel("Engine Status:"))
@@ -10832,7 +10833,7 @@ class SystemConnectivityPage(QWidget):
             saved_model = self._load_app_settings().get("local_ai_model", "qwen2.5:3b")
             self._local_model_combo.setCurrentText(saved_model)
             online = local_brain.is_available()
-            self._local_status_lbl.setText("● Local Engine Online (Ollama)" if online else "x Local Engine Offline")
+            self._local_status_lbl.setText(f"● Local Engine Online ({local_brain.engine_label()})" if online else "x Local Engine Offline")
             self._local_status_lbl.setStyleSheet("color: #00ffaa; font-weight: bold;" if online else "color: #ff5555; font-weight: bold;")
 
         _populate_models()

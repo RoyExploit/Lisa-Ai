@@ -26,10 +26,18 @@ class UnifiedAIClient:
 
     def reload_settings(self):
         try:
+            if not SETTINGS_PATH.exists():
+                # First run: app_settings.json is created later by the UI.
+                # Keep defaults instead of logging a scary error.
+                logger.debug("[LLM Client] Settings file not found, using defaults.")
+                return
             with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self._provider = data.get("default_ai_provider", "OpenRouter")
-            self._local_url = data.get("local_ai_url", "http://localhost:11434/v1").rstrip("/")
+            # Normalize bare origins (e.g. LM Studio's http://localhost:1234)
+            # to the OpenAI-compatible /v1 base so requests don't 404.
+            from core.local_brain import normalize_endpoint
+            self._local_url = normalize_endpoint(data.get("local_ai_url", ""))
             self._local_model = data.get("local_ai_model", "llama3.2")
         except Exception as e:
             logger.error(f"[LLM Client] Failed to load settings: {e}")

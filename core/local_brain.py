@@ -5,6 +5,7 @@ Provides full offline local LLM execution using an OpenAI-compatible local runti
 """
 
 import json
+import urllib.parse
 import urllib.request
 import urllib.error
 import threading
@@ -12,6 +13,35 @@ from typing import Dict, Any, List, Optional, Generator
 
 DEFAULT_ENDPOINT = "http://localhost:11434/v1"
 OLLAMA_BASE = "http://localhost:11434"
+
+
+def normalize_endpoint(url: Optional[str]) -> str:
+    """Normalize a user-entered local server URL to an OpenAI-compatible base.
+
+    Accepts bare origins (LM Studio's http://localhost:1234), full /v1 URLs,
+    and host:port strings, and returns a URL that /models and
+    /chat/completions can safely be appended to (Ollama, LM Studio, vLLM,
+    LocalAI all serve the OpenAI API under /v1).
+    """
+    url = (url or "").strip().rstrip("/")
+    if not url:
+        return DEFAULT_ENDPOINT
+    if "://" not in url:
+        url = "http://" + url
+    path = urllib.parse.urlsplit(url).path
+    if "v1" not in path:
+        url += "/v1"
+    return url
+
+
+def _configured_url() -> str:
+    """Reads local_ai_url from app_settings.json ('' when unavailable)."""
+    try:
+        from memory import config_manager
+        raw = config_manager.load_settings().get("local_ai_url", "")
+        return (raw or "").strip()
+    except Exception:
+        return ""
 
 CORE_LOCAL_TOOL_NAMES = {
     "open_app", "computer_settings", "system_diagnostics", "spotify_controller",
@@ -47,17 +77,63 @@ class LocalBrain:
         self.enabled = False
         self._cached_models: List[str] = []
 
-    def is_available(self) -> bool:
-        """Checks if the local LLM server is up and responding."""
+    def resolve_endpoint(self) -> str:
+        """Endpoint to use: the Local Server URL from Settings if set,
+        otherwise the constructor value (default Ollama)."""
+        raw = _configured_url()
+        if not raw:
+            return self.endpoint
+        return normalize_endpoint(raw)
+
+    def engine_label(self) -> str:
+        """Human-readable name of the configured engine, for the UI status."""
+        endpoint = self.resolve_endpoint()
         try:
-            req = urllib.request.Request(f"{OLLAMA_BASE}/api/tags", method="GET")
+            parts = urllib.parse.urlsplit(endpoint)
+            port = parts.port
+        except Exception:
+            return "Local"
+        if port == 11434:
+            return "Ollama"
+        if port == 1234:
+            return "LM Studio"
+        host = parts.hostname or "Local"
+        return f"{host}:{port}" if port else host
+
+    def is_available(self) -> bool:
+        """Checks if the configured local LLM server (Ollama, LM Studio,
+        vLLM, LocalAI, ...) is up via the OpenAI-compatible /models route."""
+        endpoint = self.resolve_endpoint()
+        try:
+            req = urllib.request.Request(f"{endpoint}/models", method="GET")
             with urllib.request.urlopen(req, timeout=2.0) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
-                    self._cached_models = [m.get("name") for m in data.get("models", [])]
+                    models = [
+                        m.get("id") for m in data.get("data", [])
+                        if isinstance(m, dict) and m.get("id")
+                    ]
+                    if models:
+                        self._cached_models = models
                     return True
         except Exception:
             pass
+
+        # Legacy fallback: old Ollama builds without the /v1 routes. Only
+        # probed when the configured endpoint is still the Ollama default,
+        # so a configured LM Studio is never masked by a stray Ollama.
+        if endpoint == DEFAULT_ENDPOINT:
+            try:
+                req = urllib.request.Request(f"{OLLAMA_BASE}/api/tags", method="GET")
+                with urllib.request.urlopen(req, timeout=2.0) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        self._cached_models = [
+                            m.get("name") for m in data.get("models", [])
+                        ]
+                        return True
+            except Exception:
+                pass
         return False
 
     def list_installed_models(self) -> List[str]:
@@ -149,7 +225,7 @@ class LocalBrain:
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            f"{self.endpoint}/chat/completions",
+            f"{self.resolve_endpoint()}/chat/completions",
             data=data,
             headers={"Content-Type": "application/json"},
         )
@@ -188,7 +264,7 @@ class LocalBrain:
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
-            f"{self.endpoint}/chat/completions",
+            f"{self.resolve_endpoint()}/chat/completions",
             data=data,
             headers={"Content-Type": "application/json"},
         )
