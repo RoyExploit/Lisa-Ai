@@ -527,10 +527,11 @@ class RemoteKeyOverlay(QWidget):
         self._new_btn.clicked.connect(self._refresh_key)
         btn_row.addWidget(self._new_btn)
 
-        close_btn = QPushButton("Close")
+        close_btn = QPushButton()
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setFixedHeight(40)
-        close_btn.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        close_btn.setIcon(QIcon(_icon_pixmap("close", 13)))
+        close_btn.setIconSize(QSize(13, 13))
         close_btn.setStyleSheet(f"""
             QPushButton {{
                 background: rgba(255, 255, 255, 0.03);
@@ -1288,9 +1289,10 @@ class MemoryInspectorOverlay(QWidget):
             scroll.setWidget(inner)
             self._lay.addWidget(scroll)
 
-        close = QPushButton("CLOSE")
+        close = QPushButton()
         close.setFixedHeight(34)
-        close.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        close.setIcon(QIcon(_icon_pixmap("close", 13)))
+        close.setIconSize(QSize(13, 13))
         close.setCursor(Qt.CursorShape.PointingHandCursor)
         close.setStyleSheet(f"""
             QPushButton {{
@@ -1363,12 +1365,12 @@ def _framed_logo(size: int, icon_size: int | None = None, *, bg: str = "rgba(18,
     return frame
 
 
-def _icon_pixmap(kind: str, size: int = 18) -> QPixmap:
+def _icon_pixmap(kind: str, size: int = 18, color: str | None = None) -> QPixmap:
     px = QPixmap(size, size)
     px.fill(Qt.GlobalColor.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(qcol(C.WHITE), max(2.2, size * 0.14), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    pen = QPen(qcol(color or C.WHITE), max(2.2, size * 0.14), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     p.setPen(pen)
     p.setBrush(Qt.BrushStyle.NoBrush)
 
@@ -1383,10 +1385,39 @@ def _icon_pixmap(kind: str, size: int = 18) -> QPixmap:
         p.drawLine(QPointF(size*0.50, size*0.62), QPointF(size*0.50, size*0.83))
         p.drawLine(QPointF(size*0.36, size*0.83), QPointF(size*0.64, size*0.83))
         p.drawLine(QPointF(size*0.42, size*0.70), QPointF(size*0.58, size*0.70))
+    elif kind == "mic_off":
+        # Mic silhouette + diagonal slash: unmistakably "muted".
+        p.drawRoundedRect(QRectF(size*0.31, size*0.14, size*0.38, size*0.48), size*0.16, size*0.16)
+        p.drawLine(QPointF(size*0.50, size*0.62), QPointF(size*0.50, size*0.83))
+        p.drawLine(QPointF(size*0.36, size*0.83), QPointF(size*0.64, size*0.83))
+        p.setPen(QPen(qcol(color or C.RED, 255), max(2.4, size * 0.15),
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.drawLine(QPointF(size*0.24, size*0.80), QPointF(size*0.78, size*0.22))
     elif kind == "send":
-        p.drawLine(QPointF(size*0.20, size*0.50), QPointF(size*0.70, size*0.50))
-        p.drawLine(QPointF(size*0.48, size*0.30), QPointF(size*0.70, size*0.50))
-        p.drawLine(QPointF(size*0.48, size*0.70), QPointF(size*0.70, size*0.50))
+        # Paper-plane arrow: shaft + filled head for a solid send glyph.
+        p.drawLine(QPointF(size*0.18, size*0.52), QPointF(size*0.72, size*0.52))
+        p.setBrush(qcol(color or C.WHITE))
+        head = QPainterPath()
+        head.moveTo(QPointF(size*0.82, size*0.52))
+        head.lineTo(QPointF(size*0.50, size*0.26))
+        head.lineTo(QPointF(size*0.60, size*0.52))
+        head.lineTo(QPointF(size*0.50, size*0.78))
+        head.closeSubpath()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPath(head)
+    elif kind == "copy":
+        # Two overlapping rectangles: front outline + back sheet.
+        p.drawRoundedRect(QRectF(size*0.34, size*0.28, size*0.44, size*0.56), size*0.07, size*0.07)
+        p.drawLine(QPointF(size*0.24, size*0.70), QPointF(size*0.24, size*0.24))
+        p.drawLine(QPointF(size*0.24, size*0.24), QPointF(size*0.60, size*0.24))
+        p.drawLine(QPointF(size*0.60, size*0.24), QPointF(size*0.60, size*0.28))
+    elif kind == "minimize":
+        # Horizontal dash centered in the glyph box.
+        p.drawLine(QPointF(size*0.24, size*0.52), QPointF(size*0.76, size*0.52))
+    elif kind == "close":
+        # Clean X glyph (replaces font-dependent "x" text buttons).
+        p.drawLine(QPointF(size*0.28, size*0.28), QPointF(size*0.72, size*0.72))
+        p.drawLine(QPointF(size*0.72, size*0.28), QPointF(size*0.28, size*0.72))
 
     p.end()
     return px
@@ -2455,11 +2486,30 @@ class MessageCard(QFrame):
             "error": C.RED,
         }.get(role, C.TEXT)
         text_lbl.setStyleSheet(f"color: {text_color}; background: transparent;")
+        text_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        text_lbl.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        text_lbl.customContextMenuRequested.connect(
+            lambda pos, _t=text: self._copy_card_text(_t, text_lbl, pos)
+        )
 
         body.addLayout(top)
         body.addWidget(text_lbl)
         lay.addWidget(avatar)
         lay.addLayout(body)
+
+    def _copy_card_text(self, text: str, widget: QLabel, pos):
+        try:
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                "QMenu { background: rgba(12, 14, 18, 245); color: #ffffff; "
+                "border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 8px; padding: 4px; }"
+                "QMenu::item:selected { background: rgba(0, 229, 255, 0.25); border-radius: 6px; }"
+            )
+            act = menu.addAction("Copy message")
+            if menu.exec(widget.mapToGlobal(pos)) == act:
+                QApplication.clipboard().setText(text or "")
+        except Exception:
+            pass
 
 
 class TaskCard(QFrame):
@@ -2904,6 +2954,20 @@ class ChatBubble(QFrame):
         time_lbl.setStyleSheet("color: rgba(255,255,255,0.45); background: transparent;")
         head.addWidget(time_lbl)
 
+        # Copy button: copies the bubble's full text to the clipboard.
+        self._copy_btn = QPushButton()
+        self._copy_btn.setFixedSize(20, 20)
+        self._copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._copy_btn.setToolTip("Copy message")
+        self._copy_btn.setIcon(QIcon(_icon_pixmap("copy", 11)))
+        self._copy_btn.setIconSize(QSize(11, 11))
+        self._copy_btn.setStyleSheet(
+            "QPushButton { background: transparent; border: none; }"
+            "QPushButton:hover { background: rgba(0, 229, 255, 0.18); border-radius: 10px; }"
+        )
+        self._copy_btn.clicked.connect(self._copy_message)
+        head.addWidget(self._copy_btn)
+
         outer.addLayout(head)
 
         self._browser = QLabel()
@@ -2913,6 +2977,8 @@ class ChatBubble(QFrame):
         self._browser.setWordWrap(True)
         self._browser.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._browser.setStyleSheet("QLabel { background: transparent; border: none; color: #f4f6f8; padding: 0; margin: 0; }")
+        self._browser.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._browser.customContextMenuRequested.connect(self._show_copy_menu)
         self._render_text(text or "")
 
         outer.addWidget(self._browser)
@@ -2928,6 +2994,31 @@ class ChatBubble(QFrame):
 
     def _render_text(self, text: str, final: bool = True):
         self._browser.setText(_markdown_to_html(text or "", self._role))
+
+    def _show_copy_menu(self, pos):
+        """Right-click menu on a bubble: copy message text."""
+        try:
+            menu = QMenu(self)
+            menu.setStyleSheet(
+                "QMenu { background: rgba(12, 14, 18, 245); color: #ffffff; "
+                "border: 1px solid rgba(0, 229, 255, 0.35); border-radius: 8px; padding: 4px; }"
+                "QMenu::item:selected { background: rgba(0, 229, 255, 0.25); border-radius: 6px; }"
+            )
+            act = menu.addAction("Copy message")
+            chosen = menu.exec(self._browser.mapToGlobal(pos))
+            if chosen == act:
+                self._copy_message()
+        except Exception:
+            pass
+
+    def _copy_message(self):
+        """Copy this bubble's full text; brief check feedback on the button."""
+        try:
+            QApplication.clipboard().setText(self._full_text or "")
+            self._copy_btn.setToolTip("Copied!")
+            QTimer.singleShot(1200, lambda: self._copy_btn.setToolTip("Copy message"))
+        except Exception:
+            pass
 
     def _start_typing_animation(self):
         self._typing_timer = QTimer(self)
@@ -3380,11 +3471,12 @@ class WorkspaceSidebar(QWidget):
         self._title.setStyleSheet("color: #FFFFFF; background: transparent; letter-spacing: 1px;")
         header.addWidget(self._title)
         header.addStretch()
-        self._close_btn = QPushButton("x")
+        self._close_btn = QPushButton()
         self._close_btn.setToolTip("Close Workspace")
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._close_btn.setFixedSize(30, 30)
-        self._close_btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self._close_btn.setIcon(QIcon(_icon_pixmap("close", 14)))
+        self._close_btn.setIconSize(QSize(14, 14))
         self._close_btn.setStyleSheet(
             """
             QPushButton {
@@ -3548,23 +3640,25 @@ class WorkspaceSidebar(QWidget):
         self._input.returnPressed.connect(self._send)
         input_row.addWidget(self._input, 1)
 
-        self._mic_btn = QPushButton()
-        self._mic_btn.setFixedSize(30, 30)
-        self._mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._mic_btn.setToolTip("Toggle Voice")
-        self._mic_btn.setIcon(QIcon(_icon_pixmap("mic", 15)))
-        self._mic_btn.setIconSize(QSize(15, 15))
-        self._mic_btn.setStyleSheet(
+        self._workspace_mic_btn = QPushButton()
+        self._workspace_mic_btn.setFixedSize(30, 30)
+        self._workspace_mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._workspace_mic_btn.setToolTip("Toggle Voice")
+        self._workspace_mic_btn.setIcon(QIcon(_icon_pixmap("mic", 15)))
+        self._workspace_mic_btn.setIconSize(QSize(15, 15))
+        self._workspace_mic_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
-        self._mic_btn.clicked.connect(self.mic_requested.emit)
-        input_row.addWidget(self._mic_btn)
+        self._workspace_mic_btn.clicked.connect(self.mic_requested.emit)
+        input_row.addWidget(self._workspace_mic_btn)
 
         self._send_btn = QPushButton("")
         self._send_btn.setFixedSize(32, 30)
         self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._send_btn.setToolTip("Send message (Enter)")
+        self._send_btn.setIcon(QIcon(_icon_pixmap("send", 16, color=C.PRI)))
+        self._send_btn.setIconSize(QSize(16, 16))
         self._send_btn.setStyleSheet(
             f"QPushButton {{ background: rgba(0, 229, 255, 0.25); color: {C.PRI}; border: 1px solid rgba(0, 229, 255, 0.50); border-radius: 8px; font-weight: bold; font-size: 13px; }}"
             f"QPushButton:hover {{ background: rgba(0, 229, 255, 0.45); color: #FFFFFF; border-color: {C.PRI}; }}"
@@ -4138,23 +4232,25 @@ class InlineChatWorkspace(QFrame):
         self._input.returnPressed.connect(self._send)
         input_row.addWidget(self._input, 1)
 
-        self._mic_btn = QPushButton()
-        self._mic_btn.setFixedSize(28, 28)
-        self._mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._mic_btn.setToolTip("Toggle Voice")
-        self._mic_btn.setIcon(QIcon(_icon_pixmap("mic", 14)))
-        self._mic_btn.setIconSize(QSize(14, 14))
-        self._mic_btn.setStyleSheet(
+        self._sidebar_mic_btn = QPushButton()
+        self._sidebar_mic_btn.setFixedSize(28, 28)
+        self._sidebar_mic_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sidebar_mic_btn.setToolTip("Toggle Voice")
+        self._sidebar_mic_btn.setIcon(QIcon(_icon_pixmap("mic", 14)))
+        self._sidebar_mic_btn.setIconSize(QSize(14, 14))
+        self._sidebar_mic_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; color: {C.WHITE}; border: none; }}"
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
-        self._mic_btn.clicked.connect(self.mic_requested.emit)
+        self._sidebar_mic_btn.clicked.connect(self.mic_requested.emit)
         input_row.addWidget(self._mic_btn)
 
         self._send_btn = QPushButton("")
         self._send_btn.setFixedSize(30, 28)
         self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._send_btn.setToolTip("Send message")
+        self._send_btn.setIcon(QIcon(_icon_pixmap("send", 14, color=C.PRI)))
+        self._send_btn.setIconSize(QSize(14, 14))
         self._send_btn.setStyleSheet(
             f"QPushButton {{ background: rgba(0, 229, 255, 0.22); color: {C.PRI}; border: 1px solid rgba(0, 229, 255, 0.45); border-radius: 7px; font-weight: bold; font-size: 13px; }}"
             f"QPushButton:hover {{ background: rgba(0, 229, 255, 0.40); color: #FFFFFF; border-color: {C.PRI}; }}"
@@ -4629,9 +4725,11 @@ class LisaTelemetryWing(QFrame):
         self._pin_btn.clicked.connect(self.toggle_pin)
         header_row.addWidget(self._pin_btn)
 
-        self._close_btn = QPushButton("x")
+        self._close_btn = QPushButton()
         self._close_btn.setFixedSize(26, 26)
         self._close_btn.setToolTip("Dismiss")
+        self._close_btn.setIcon(QIcon(_icon_pixmap("close", 12)))
+        self._close_btn.setIconSize(QSize(12, 12))
         self._close_btn.clicked.connect(self.dismiss)
         header_row.addWidget(self._close_btn)
         lay.addLayout(header_row)
@@ -4943,9 +5041,11 @@ class LisaResultWing(QFrame):
         self._pin_btn.clicked.connect(self.toggle_pin)
         header_row.addWidget(self._pin_btn)
 
-        self._close_btn = QPushButton("x")
+        self._close_btn = QPushButton()
         self._close_btn.setFixedSize(26, 26)
         self._close_btn.setToolTip("Dismiss")
+        self._close_btn.setIcon(QIcon(_icon_pixmap("close", 12)))
+        self._close_btn.setIconSize(QSize(12, 12))
         self._close_btn.clicked.connect(self.dismiss)
         header_row.addWidget(self._close_btn)
         lay.addLayout(header_row)
@@ -7924,10 +8024,11 @@ class MeetingOverlay(QWidget):
         top.addWidget(self._title)
         top.addStretch()
 
-        self._min_btn = QPushButton("-")
+        self._min_btn = QPushButton()
         self._min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._min_btn.setFixedSize(28, 28)
-        self._min_btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self._min_btn.setIcon(QIcon(_icon_pixmap("minimize", 12)))
+        self._min_btn.setIconSize(QSize(12, 12))
         self._min_btn.setToolTip("Minimize meeting bar")
         self._min_btn.setStyleSheet(f"""
             QPushButton {{
@@ -7964,10 +8065,11 @@ class MeetingOverlay(QWidget):
         self._stop_btn.clicked.connect(self.stop_requested.emit)
         top.addWidget(self._stop_btn)
 
-        self._close_btn = QPushButton("x")
+        self._close_btn = QPushButton()
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._close_btn.setFixedSize(28, 28)
-        self._close_btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self._close_btn.setIcon(QIcon(_icon_pixmap("close", 12)))
+        self._close_btn.setIconSize(QSize(12, 12))
         self._close_btn.setToolTip("Close meeting bar")
         self._close_btn.setStyleSheet(f"""
             QPushButton {{
@@ -8916,10 +9018,20 @@ class MainWindow(QMainWindow):
             sound_mgr.play_listening_start()
 
     def _style_mute_btn(self):
-        if not hasattr(self, "_mute_btn") or self._mute_btn is None:
-            return
-        if self._muted:
-            self._mute_btn.setText("Muted")
+        # Icon reflects mute state on every visible mic/mute control.
+        kind = "mic_off" if self._muted else "mic"
+        tip = "Unmute microphone" if self._muted else "Toggle Voice"
+        for btn in (getattr(self, "_workspace_mic_btn", None), getattr(self, "_sidebar_mic_btn", None)):
+            if btn is not None:
+                try:
+                    btn.setIcon(QIcon(_icon_pixmap(kind, 14)))
+                    btn.setIconSize(QSize(14, 14))
+                    btn.setToolTip(tip)
+                except Exception:
+                    pass
+            self._mute_btn.setIcon(QIcon(_icon_pixmap("mic_off", 16, color=C.RED)))
+            self._mute_btn.setIconSize(QSize(16, 16))
+            self._mute_btn.setToolTip("Unmute microphone")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #1a1010; color: {C.RED};
@@ -8927,7 +9039,9 @@ class MainWindow(QMainWindow):
                 }}
             """)
         else:
-            self._mute_btn.setText("Mic")
+            self._mute_btn.setIcon(QIcon(_icon_pixmap("mic", 16)))
+            self._mute_btn.setIconSize(QSize(16, 16))
+            self._mute_btn.setToolTip("Toggle Voice")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: rgba(16,16,16,235); color: {C.WHITE};
@@ -12783,8 +12897,10 @@ class SmartDevicesSection(QFrame):
         self._panel_name.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         self._panel_name.setStyleSheet(f"color: {C.WHITE};")
         panel_top.addWidget(self._panel_name, 1)
-        self._panel_close = QPushButton("X")
+        self._panel_close = QPushButton()
         self._panel_close.setFixedSize(28, 28)
+        self._panel_close.setIcon(QIcon(_icon_pixmap("close", 12)))
+        self._panel_close.setIconSize(QSize(12, 12))
         self._panel_close.clicked.connect(self._close_panel)
         panel_top.addWidget(self._panel_close)
         self._panel_lay.addLayout(panel_top)
