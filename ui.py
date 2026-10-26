@@ -4243,7 +4243,7 @@ class InlineChatWorkspace(QFrame):
             f"QPushButton:hover {{ color: {C.PRI}; }}"
         )
         self._sidebar_mic_btn.clicked.connect(self.mic_requested.emit)
-        input_row.addWidget(self._mic_btn)
+        input_row.addWidget(self._sidebar_mic_btn)
 
         self._send_btn = QPushButton("")
         self._send_btn.setFixedSize(30, 28)
